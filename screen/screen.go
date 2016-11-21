@@ -168,6 +168,12 @@ func (s *Screen) setSize(w, h int) {
 
 	s.charUpdate.X = 0
 	s.charUpdate.Y = -1
+
+	// Reset the scroll region on resize.
+	s.scroll.tl.X = 0
+	s.scroll.tl.Y = 0
+	s.scroll.br.X = s.Size.X - 1
+	s.scroll.br.Y = s.Size.Y - 1
 }
 
 func (s *Screen) dump() {
