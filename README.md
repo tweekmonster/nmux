@@ -10,7 +10,7 @@ rendered in a browser: https://youtu.be/mzfHBPHkT-E
 ## Install
 
 ```
-$ go get github.com/tweekmonster/nmux
+$ go install github.com/tweekmonster/nmux/cmd/nmux
 ```
 
 ## Usage
