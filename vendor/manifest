@@ -1,0 +1,13 @@
+{
+	"version": 0,
+	"dependencies": [
+		{
+			"importpath": "github.com/neovim/go-client",
+			"repository": "https://github.com/neovim/go-client",
+			"vcs": "git",
+			"revision": "2ba67b35ea08f186e4dc08c1fa298a69ced5a559",
+			"branch": "master",
+			"notests": true
+		}
+	]
+}
