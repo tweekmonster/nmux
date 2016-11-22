@@ -118,10 +118,11 @@ function nmuxKey(e) {
       key = 'Space';
       break;
     case '<':
-      key = ',';
-      break;
+    case ',':
     case '>':
-      key = '.';
+    case '.':
+      // Apparently these keys don't support modifiers.
+      return key;
       break;
     case '|':
       key = 'Bar';
