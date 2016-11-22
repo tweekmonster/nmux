@@ -12,6 +12,7 @@ const (
 	OpClear
 	OpKeyboard
 	OpCursor
+	OpPalette
 	OpStyle
 	OpPut
 	OpPutRep

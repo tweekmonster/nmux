@@ -54,7 +54,7 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.flushPutOps()
 
 		m := args.Map()
-		attrs := s.DefaultAttrs
+		attrs := *s.DefaultAttrs
 
 		if c, ok := m.Int64("foreground"); ok {
 			attrs.Fg = Color(c)
@@ -88,8 +88,22 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 			attrs.Attrs |= AttrUndercurl
 		}
 
-		s.CurAttrs = attrs
-		s.writeStyle(attrs)
+		// Try to reuse a pointer to an existing color that matches the one that was
+		// just set.
+		for existing := range s.attrCounter {
+			e := *existing
+			e.id = 0
+			if attrs == e {
+				s.CurAttrs = existing
+				s.writeStyle(existing)
+				return
+			}
+		}
+
+		s.attrID++
+		attrs.id = s.attrID
+		s.CurAttrs = &attrs
+		s.writeStyle(s.CurAttrs)
 
 	case "put":
 		i := s.Cursor.Y*s.Size.X + s.Cursor.X

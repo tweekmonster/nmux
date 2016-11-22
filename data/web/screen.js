@@ -20,11 +20,8 @@ var Screen = function() {
   var cursorX = 0;
   var cursorY = 0;
   var bgCache = {};
-  var attrs = 0;
-  var colors = [0, 0, 0];
-  var fgColor = '#fff';
-  var bgColor = '#000';
-  var spColor = '#000';
+  var palette = {};
+  var brush = null;
 
   // Global X coordinate for drawing undercurls whose ends meet regardless of
   // what canvs they're drawn on.
@@ -131,8 +128,12 @@ var Screen = function() {
     gridH = h;
   };
 
-  self.clear = function() {
-    buffer.ctx.fillStyle = bgColor;
+  self.clear = function(id, a, fg, bg, sp) {
+    palette = {};
+    brush = null;
+    self.setPalette(id, a, fg, bg, sp);
+    self.setAttributes(id);
+    buffer.ctx.fillStyle = brush.bg;
     buffer.ctx.fillRect(0, 0, buffer.width, buffer.height);
   };
 
@@ -140,22 +141,27 @@ var Screen = function() {
     return '#' + ('000000' + n.toString(16)).substr(-6);
   }
 
-  self.setAttributes = function(a, fg, bg, sp) {
-    attrs = a;
-    colors = [fg, bg, sp];
-    fgColor = rgb(fg);
-    bgColor = rgb(bg);
-    spColor = rgb(sp);
-  }
+  self.setPalette = function(id, a, fg, bg, sp) {
+    palette[id] = {
+      'attr': a,
+      'fg': rgb(fg),
+      'bg': rgb(bg),
+      'sp': rgb(sp),
+    };
+  };
 
-  function setFont(ctx, attrs) {
+  self.setAttributes = function(id) {
+    brush = palette[id];
+  };
+
+  function setFont(ctx, a) {
     var f = font;
 
-    if ((attrs & nmux.AttrBold) === nmux.AttrBold) {
+    if ((a & nmux.AttrBold) === nmux.AttrBold) {
       f = 'bold ' + f;
     }
 
-    if ((attrs & nmux.AttrItalic) === nmux.AttrItalic) {
+    if ((a & nmux.AttrItalic) === nmux.AttrItalic) {
       f = 'italic ' + f;
     }
 
@@ -167,7 +173,7 @@ var Screen = function() {
   function renderUndercurl(ctx, x, y, w, fg, bg, sp) {
     ctx.save();
     ctx.translate(0, -1);
-    ctx.fillStyle = sp || spColor;
+    ctx.fillStyle = sp || brush.sp;
 
     for (var i = 0; i < w; i++) {
       // This is usually `sin(theta) * amplitude`, but we're only stepping by
@@ -181,13 +187,13 @@ var Screen = function() {
   function renderUnderline(ctx, x, y, w, fg, bg, sp) {
     ctx.save();
     ctx.translate(0, charLH + 1);
-    ctx.fillStyle = fg || fgColor;
+    ctx.fillStyle = fg || brush.fg;
     ctx.fillRect(x, y, w, 1);
     ctx.restore();
   }
 
   function renderAttrs(ctx, x, y, w, a, fg, bg, sp) {
-    a = a || attrs;
+    a = a || brush.attr;
 
     if ((a & nmux.AttrUnderline) === nmux.AttrUnderline) {
       renderUnderline(ctx, x, y, w, fg, bg, sp);
@@ -219,14 +225,14 @@ var Screen = function() {
   self.renderRepeatedText = function(c, index, len) {
     var x = (index % gridW) * charW;
     var y = Math.floor(index / gridW) * charH;
-    var k = fgColor + bgColor + spColor;
+    var k = brush.fg + brush.bg + brush.sp;
     var pat = repeatCache[k];
 
     gX = x;
 
     if (c != ' ' || !pat) {
       var scr = scratch(charW, charH);
-      renderChar(scr.ctx, 0, 0, c, attrs, fgColor, bgColor, spColor);
+      renderChar(scr.ctx, 0, 0, c, brush.attr, brush.fg, brush.bg, brush.sp);
 
       pat = scr.ctx.createPattern(scr, 'repeat');
 
@@ -256,12 +262,12 @@ var Screen = function() {
     var scr = scratch(w, charH);
 
     scr.ctx.save();
-    scr.ctx.fillStyle = bgColor;
+    scr.ctx.fillStyle = brush.bg;
     scr.ctx.fillRect(0, 0, w, charH);
 
-    setFont(scr.ctx, attrs);
+    setFont(scr.ctx, brush.attr);
     scr.ctx.translate(0, charOffsetY - 2);
-    scr.ctx.fillStyle = fgColor;
+    scr.ctx.fillStyle = brush.fg;
 
     for (var c, i = 0, l = str.length; i < l; i++) {
       c = str.substr(i, 1);
@@ -304,16 +310,23 @@ var Screen = function() {
     nmux.animate.add('cursor', blinkCursor, 500, cursorDelay);
   };
 
-  self.setCursor = function(mode, x, y, c, a, fg, bg, sp) {
+  self.setCursor = function(mode, x, y, id, c) {
+    var b = palette[id];
+    if (!b) {
+      return;
+    }
+
     cursor.style.left = (x * charW) + 'px';
     cursor.style.top = (y * charH) + 'px';
 
     gX = x * charW;
 
+    var a = b.attr;
+    var fg = b.fg;
+    var bg = b.bg;
+    var sp = b.sp;
+
     c = String.fromCharCode(c);
-    fg = rgb(fg);
-    bg = rgb(bg);
-    sp = rgb(sp);
     cursorX = x;
     cursorY = y;
 

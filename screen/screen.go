@@ -1,7 +1,6 @@
 package screen
 
 import (
-	"bufio"
 	"bytes"
 	"io"
 	"log"
@@ -10,6 +9,7 @@ import (
 )
 
 type CellAttrs struct {
+	id    uint32
 	Attrs Attr
 	Fg    Color
 	Bg    Color
@@ -18,7 +18,7 @@ type CellAttrs struct {
 
 type Cell struct {
 	Char rune
-	CellAttrs
+	*CellAttrs
 }
 
 type Vector2 struct {
@@ -32,32 +32,68 @@ type ScrollRegion struct {
 }
 
 type Screen struct {
-	mu           sync.Mutex
-	Size         Vector2 // Screen size.
-	Cursor       Vector2 // Cursor postion.
-	Title        string
-	Mode         Mode         // Current mode.
-	Mouse        bool         // Mouse state. This updates Mode.
-	Busy         bool         // Busy state. This updates Mode.
-	DefaultAttrs CellAttrs    // Default attributes for updating attributes.
-	CurAttrs     CellAttrs    // Current attributes for new characters.
-	scroll       ScrollRegion // Region to scroll.
-	Buffer       []Cell       // The rendered screen.
-	charUpdate   Vector2      // Tracks ranges of characters being set.
-	charTracking bool         // Whether or not to track characters being set.
-	payload      bytes.Buffer
-	writer       *bufio.Writer
-	sink         io.Writer
+	mu     sync.Mutex
+	Size   Vector2 // Screen size.
+	Cursor Vector2 // Cursor postion.
+	Title  string
+
+	// Current mode.
+	Mode Mode
+
+	// Mouse state. This updates Mode.
+	Mouse bool
+
+	// Busy state. This updates Mode.
+	Busy bool
+
+	// Default attributes for updating attributes.
+	DefaultAttrs *CellAttrs
+
+	// Current attributes for new characters.
+	CurAttrs *CellAttrs
+
+	// To avoid assigning a new ID to previously seen attributes.  Cleared after
+	// nvim sends a clear command.
+	attrCounter map[*CellAttrs]int
+
+	// Keeps track of what attributes have been sent to the client.  Cleared after
+	// nvim sends a clear command.
+	sentAttrs map[*CellAttrs]int
+	lastSent  *CellAttrs
+
+	attrID uint32
+
+	// Region to scroll.
+	scroll ScrollRegion
+
+	// The rendered screen.
+	Buffer []Cell
+
+	// Tracks ranges of characters being set.
+	charUpdate Vector2
+
+	// Whether or not to track characters being set.
+	charTracking bool
+
+	// The position of a clear operation in the output buffer.  This allows for
+	// the palette to be injected right after.
+	clearEnd int
+
+	payload bytes.Buffer
+	sink    io.Writer
 }
 
 // NewScreen creates a new screen.
 func NewScreen(w, h int) *Screen {
+	attrs := &CellAttrs{}
 	s := &Screen{
-		charUpdate: Vector2{0, -1},
-		Mode:       ModeNormal | ModeMouseOn,
+		charUpdate:   Vector2{0, -1},
+		DefaultAttrs: attrs,
+		CurAttrs:     attrs,
+		attrCounter:  make(map[*CellAttrs]int),
+		sentAttrs:    make(map[*CellAttrs]int),
+		Mode:         ModeNormal | ModeMouseOn,
 	}
-
-	s.writer = bufio.NewWriter(&s.payload)
 
 	s.setSize(w, h)
 	return s
@@ -70,10 +106,13 @@ func (s *Screen) SetSink(w io.Writer) {
 	defer s.mu.Unlock()
 
 	s.flush()
+
+	s.sentAttrs = make(map[*CellAttrs]int)
+	s.lastSent = nil
+
 	s.sink = w
 
 	s.writeSize()
-	s.writeStyle(s.DefaultAttrs)
 	s.writeClear()
 
 	lastIndex := 0
@@ -104,6 +143,17 @@ func (s *Screen) flushPutOps() {
 	}
 }
 
+func (s *Screen) setCellAttrs(index int, attrs *CellAttrs) {
+	cellAttr := s.Buffer[index].CellAttrs
+	if cellAttr != s.CurAttrs {
+		if cellAttr != nil {
+			s.attrCounter[cellAttr]--
+		}
+		s.attrCounter[s.CurAttrs]++
+		s.Buffer[index].CellAttrs = s.CurAttrs
+	}
+}
+
 // clearLine is a helper for clearing a line.
 func (s *Screen) clearLine(x, y int) {
 	s.flushPutOps()
@@ -113,7 +163,7 @@ func (s *Screen) clearLine(x, y int) {
 
 	for i := i1; i < i2; i++ {
 		s.Buffer[i].Char = ' '
-		s.Buffer[i].CellAttrs = s.CurAttrs
+		s.setCellAttrs(i, s.CurAttrs)
 	}
 
 	s.writeRange(i1, i2)
@@ -130,10 +180,8 @@ func (s *Screen) setCursor(x, y int) {
 // cursor position and the range of cells to be included when flushing put
 // operations.
 func (s *Screen) setChar(index int, c rune) {
-	s.Buffer[index] = Cell{
-		Char:      c,
-		CellAttrs: s.CurAttrs,
-	}
+	s.Buffer[index].Char = c
+	s.setCellAttrs(index, s.CurAttrs)
 
 	index++
 	if s.charTracking {

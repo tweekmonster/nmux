@@ -49,6 +49,7 @@ new (function() {
     var buf = new Reader(e.data);
     var op;
 
+    // buf.dump();
     scr.hideCursor();
 
     while (buf.remaining() > 0) {
@@ -64,24 +65,33 @@ new (function() {
       switch(op) {
         case nmux.OpResize:
           firstRun = false;
-          scr.setSize(buf.uint16(), buf.uint16());
+          scr.setSize(buf.eint32(), buf.eint32());
+          break;
+
+        case nmux.OpPalette:
+          var id, a, fg, bg, sp, len = buf.eint32();;
+          while (len > 0) {
+            id = buf.eint32();
+            a = buf.uint8();
+            fg = buf.eint32();
+            bg = buf.eint32();
+            sp = buf.eint32();
+            scr.setPalette(id, a, fg, bg, sp);
+            len--;
+          }
           break;
 
         case nmux.OpStyle:
-          var attrs = buf.uint8();
-          var fg = buf.uint24();
-          var bg = buf.uint24();
-          var sp = buf.uint24();
-          scr.setAttributes(attrs, fg, bg, sp);
+          scr.setAttributes(buf.eint32());
           break;
 
         case nmux.OpPut:
-          var index = buf.uint16();
-          var len = buf.uint16();
+          var index = buf.eint32();
+          var len = buf.eint32();
           var str = '';
 
           while (len > 0) {
-            str += String.fromCharCode(buf.uint16());
+            str += String.fromCharCode(buf.eint32());
             len--;
           }
 
@@ -89,9 +99,9 @@ new (function() {
           break;
 
         case nmux.OpPutRep:
-          var index = buf.uint16();
-          var len = buf.uint16();
-          var c = String.fromCharCode(buf.uint16());
+          var index = buf.eint32();
+          var len = buf.eint32();
+          var c = String.fromCharCode(buf.eint32());
 
           scr.renderRepeatedText(c, index, len);
           break;
@@ -99,32 +109,34 @@ new (function() {
         case nmux.OpScroll:
           var tmpBg = buf.uint24();
           var delta = buf.int16();
-          var top = buf.uint16();
-          var bottom = buf.uint16();
-          var left = buf.uint16();
-          var right = buf.uint16();
+          var top = buf.eint32();
+          var bottom = buf.eint32();
+          var left = buf.eint32();
+          var right = buf.eint32();
 
           scr.scroll(tmpBg, delta, left, top, right, bottom);
           break;
 
         case nmux.OpClear:
-          scr.clear();
+          var id, a, fg, bg, sp;
+          id = buf.eint32();
+          a = buf.uint8();
+          fg = buf.uint24();
+          bg = buf.uint24();
+          sp = buf.uint24();
+          scr.clear(id, a, fg, bg, sp);
           break;
 
         case nmux.OpFlush:
           scr.flush();
 
-          var mode = buf.uint8();
-          var cx = buf.uint16();
-          var cy = buf.uint16();
+          var mode = buf.eint32();
+          var cx = buf.eint32();
+          var cy = buf.eint32();
+          var id = buf.eint32();
+          var c = buf.eint32();
 
-          var c = buf.uint16();
-          var a = buf.uint8();
-          var fg = buf.uint24();
-          var bg = buf.uint24();
-          var sp = buf.uint24();
-
-          scr.setCursor(mode, cx, cy, c, a, fg, bg, sp);
+          scr.setCursor(mode, cx, cy, id, c);
           scr.showCursor();
           break;
 

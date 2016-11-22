@@ -37,6 +37,37 @@ var Reader = function(bytes) {
     return (bytes[cursor++] << 24) | (bytes[cursor++] << 16) | (bytes[cursor++] << 8) | bytes[cursor++];
   }
 
+  self.eint32 = function() {
+    var b = bytes[cursor];
+
+    if ((b & 0x00000080) === 0) {
+      cursor++;
+      return b;
+    }
+
+    b = (b & 0x0000007f) | bytes[cursor + 1] << 7;
+    if ((b & 0x00004000) === 0) {
+      cursor += 2;
+      return b;
+    }
+
+    b = (b & 0x00003fff) | bytes[cursor + 2] << 14;
+    if ((b & 0x00200000) === 0) {
+      cursor += 3;
+      return b;
+    }
+
+    b = (b & 0x001fffff) | bytes[cursor + 3] << 21;
+    if ((b & 0x10000000) === 0) {
+      cursor += 4;
+      return b;
+    }
+
+    b = (b & 0x0fffffff) | bytes[cursor + 4] << 28;
+    cursor += 5;
+    return b;
+  }
+
   self.toEnd = function() {
     return bytes.subarray(cursor);
   }
@@ -60,4 +91,41 @@ var Reader = function(bytes) {
     b.set(newBytes, bytes.length);
     bytes = b;
   }
+
+  self.toString = function() {
+    var width = 32;
+    var hex = '';
+    var ascii = '';
+    var i = 0, l = bytes.length;
+    var out = '';
+
+    while (i < l) {
+      hex += ('00' + bytes[i].toString(16)).substr(-2) + ' ';
+      ascii += (bytes[i] >= 32 && bytes[i] <= 127) ? String.fromCharCode(bytes[i]) : '.';
+      i++;
+
+      if (i % width == 0) {
+        out += hex + ' ' + ascii + '\n';
+        hex = '';
+        ascii = '';
+      }
+    }
+
+    if (i % 8 != 0) {
+      while (ascii.length < width) {
+        hex += '   ';
+        ascii += ' ';
+      }
+      out += hex + ' ' + ascii + '\n';
+    }
+
+    return out;
+  }
+
+  self.dump = function() {
+    console.groupCollapsed(bytes.length + ' bytes');
+    console.log(self.toString());
+    console.groupEnd();
+  }
+
 }
