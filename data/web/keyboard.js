@@ -50,6 +50,9 @@ function nmuxMouseKey(e) {
 
 function nmuxMouseWheel(e) {
   var key = 'ScrollWheelDown';
+  var charSize = this.charSize();
+  var x = Math.floor(e.x / charSize[0]);
+  var y = Math.floor(e.y / charSize[1]);
 
   if (e.deltaY < 0) {
     key = 'ScrollWheelUp';
@@ -71,7 +74,7 @@ function nmuxMouseWheel(e) {
     key = 'D-' + key;
   }
 
-  return '<' + key + '>';
+  return '<' + key + '><' + x + ',' + y + '>';
 }
 
 function nmuxKey(e) {
