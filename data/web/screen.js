@@ -55,7 +55,7 @@ var Screen = function() {
   })();
 
   // Helper for creating canvases.
-  function createCanvas(attach, styles) {
+  function createCanvas(attach, styles, alpha) {
     var canvas = document.createElement('canvas');
     canvas.style.position = 'fixed';
     canvas.style.top = '0px';
@@ -65,7 +65,7 @@ var Screen = function() {
       canvas.style[prop] = styles[prop];
     }
 
-    var ctx = canvas.getContext('2d', {'alpha': false});
+    var ctx = canvas.getContext('2d', {'alpha': !!alpha});
 
     if (attach) {
       document.body.appendChild(canvas);
@@ -85,6 +85,20 @@ var Screen = function() {
   var _scratch = [createCanvas(), createCanvas()];
   var buffer = createCanvas();
 
+  // Scratch buffer for transparent renders.
+  var _alphaScratchI = 0;
+  var _alphaScratch = [createCanvas(false, {}, true)];
+
+  var debugColors = [
+    [rgb(0xdecf3f), rgba(0xdecf3f, 0.5)],
+    [rgb(0x60bd68), rgba(0x60bd68, 0.5)],
+    [rgb(0xf15854), rgba(0xf15854, 0.5)],
+    [rgb(0x5da5da), rgba(0x5da5da, 0.5)],
+    [rgb(0xb276b2), rgba(0xb276b2, 0.5)],
+  ];
+  var debugRects = [];
+  var debug = null;
+
   cursor.width = charW;
   cursor.height = charH;
 
@@ -99,10 +113,17 @@ var Screen = function() {
     main.addEventListener(name, handler.bind(self), capture);
   };
 
-
   function scratch(w, h) {
     _scratchI++;
     var scr = _scratch[_scratchI % _scratch.length];
+    scr.width = w;
+    scr.height = h;
+    return scr;
+  }
+
+  function scratchA(w, h) {
+    _alphaScratchI++;
+    var scr = _alphaScratch[_alphaScratchI % _alphaScratch.length];
     scr.width = w;
     scr.height = h;
     return scr;
@@ -124,6 +145,11 @@ var Screen = function() {
     buffer.width = main.width = w * charW;
     buffer.height = main.height = h * charH;
 
+    if (debug) {
+      debug.width = buffer.width;
+      debug.height = buffer.height;
+    }
+
     gridW = w;
     gridH = h;
   };
@@ -139,6 +165,10 @@ var Screen = function() {
 
   function rgb(n) {
     return '#' + ('000000' + n.toString(16)).substr(-6);
+  }
+
+  function rgba(n, a) {
+    return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 0xff) + ',' + (n & 0xff) + ',' + a + ')';
   }
 
   self.setPalette = function(id, a, fg, bg, sp) {
@@ -227,13 +257,14 @@ var Screen = function() {
     var y = Math.floor(index / gridW) * charH;
     var k = brush.fg + brush.bg + brush.sp;
     var pat = repeatCache[k];
+    var w = len * charW;
 
     gX = x;
 
     if (c != ' ' || !pat) {
       var scr = scratch(charW, charH);
       renderChar(scr.ctx, 0, 0, c, brush.attr, brush.fg, brush.bg, brush.sp);
-
+      debugRect(x, y, charW, charH, 0);
       pat = scr.ctx.createPattern(scr, 'repeat');
 
       if (c == ' ') {
@@ -242,8 +273,7 @@ var Screen = function() {
       }
     }
 
-    var w = len * charW;
-
+    debugRect(x, y, w, charH, 1);
     buffer.ctx.fillStyle = pat;
     buffer.ctx.fillRect(x, y, w, charH);
 
@@ -254,6 +284,8 @@ var Screen = function() {
     var x = (index % gridW) * charW;
     var y = Math.floor(index / gridW) * charH;
     var w = str.length * charW;
+
+    debugRect(x, y, w, charH, 2);
 
     gX = x;
 
@@ -366,12 +398,87 @@ var Screen = function() {
     scr.ctx.fillRect(0, 0, w, h);
     scr.ctx.drawImage(buffer, x1, y1, w, h, 0, -delta, w, h);
 
+    if (debug) {
+      var ascr = scratchA(w, h);
+      ascr.ctx.drawImage(debug, x1, y1, w, h, 0, -delta, w, h);
+      debug.ctx.clearRect(x1, y1, w, h);
+      debug.ctx.drawImage(ascr, x1, y1);
+    }
+
     buffer.ctx.fillStyle = rgb(bg);
     buffer.ctx.fillRect(x1, y1, w, h);
     buffer.ctx.drawImage(scr, x1, y1);
   };
 
+  var debugTimer = 0;
+
+  self.toggleDebug = function() {
+    if (!debug) {
+      debug = createCanvas(true, {'zIndex': 3, 'pointerEvents': 'none'}, true);
+      debug.width = buffer.width;
+      debug.height = buffer.height;
+
+      var msg = 'Debug Enabled';
+      debug.ctx.save();
+      setFont(debug.ctx, 0);
+
+      var w = msg.length * charW;
+      debug.ctx.translate(debug.width - w - (charW * 4), charH);
+      debug.ctx.fillStyle = '#fff';
+      debug.ctx.fillRect(0, 0, w + (charW * 4), charH * 3);
+
+      debug.ctx.fillStyle = '#000';
+      debug.ctx.fillText(msg, charW * 2, charH);
+      debug.ctx.restore();
+    } else {
+      debugRects = [];
+      debug.parentNode.removeChild(debug);
+      debug = null;
+    }
+  };
+
+  function debugDraw() {
+    if (debugRects.length === 0) {
+      return;
+    }
+
+    var r, c, i = 0, ctx = debug.ctx;
+
+    debug.ctx.save();
+    debug.ctx.globalAlpha = 0.8;
+    debug.ctx.globalCompositeOperation = 'destination-in';
+    debug.ctx.drawImage(debug, 0, 0);
+    debug.ctx.restore();
+
+    while (debugRects.length) {
+      r = debugRects.pop();
+      c = debugColors[r[4]];
+      ctx.save();
+      ctx.lineWidth = 1;
+      ctx.strokeStyle = c[0];
+      ctx.fillStyle = c[1];
+      ctx.translate(r[0], r[1]);
+      ctx.fillRect(1, 1, r[2] - 2, r[3] - 2);
+      ctx.translate(0.5, 0.5);
+      ctx.strokeRect(1, 1, r[2] - 2, r[3] - 2);
+      ctx.restore();
+      i++;
+    }
+  }
+
+  function debugRect(x, y, w, h, color) {
+    if (!debug) {
+      return;
+    }
+    debugRects.push([x, y, w, h, color]);
+  }
+
   self.flush = function() {
     main.ctx.drawImage(buffer, 0, 0);
+
+    if (debug) {
+      clearInterval(debugTimer);
+      debugTimer = setTimeout(debugDraw, 10);
+    }
   };
 }

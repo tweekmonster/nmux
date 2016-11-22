@@ -44,13 +44,17 @@ new (function() {
   }
 
   var firstRun = true;
+  var debug = false;
 
   function messageHandler(e) {
     var buf = new Reader(e.data);
     var op;
 
-    // buf.dump();
     scr.hideCursor();
+
+    if (debug) {
+      console.groupCollapsed('Payload (' + buf.remaining() + ')');
+    }
 
     while (buf.remaining() > 0) {
       op = buf.uint8();
@@ -60,7 +64,6 @@ new (function() {
         // full screen the first time.
         return;
       }
-
 
       switch(op) {
         case nmux.OpResize:
@@ -143,6 +146,15 @@ new (function() {
         default:
           console.log('Unknown Op', op);
       }
+
+
+      if (debug) {
+        buf.dumpLastRead(nmux['o' + op]);
+      }
+    }
+
+    if (debug) {
+      console.groupEnd();
     }
   }
 
@@ -161,6 +173,13 @@ new (function() {
       key = nmuxMouseWheel.call(this, e);
     } else {
       key = nmuxKey.call(this, e);
+    }
+
+    // Meta-Shift-D enables debug.
+    if (key === '<D-D>') {
+      debug = !debug;
+      scr.toggleDebug();
+      return;
     }
 
     if (!key) {

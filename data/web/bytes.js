@@ -3,6 +3,7 @@
 var Reader = function(bytes) {
   // Because TypedArray is cumbersome.
   var self = this;
+  var lastDump = 0;
   var cursor = 0;
   var last = 0;
 
@@ -92,40 +93,55 @@ var Reader = function(bytes) {
     bytes = b;
   }
 
-  self.toString = function() {
-    var width = 32;
+  self.dumpRange = function(i1, i2) {
+    var width = 16;
     var hex = '';
     var ascii = '';
-    var i = 0, l = bytes.length;
     var out = '';
+    var b, i = 0, l = i2 - i1;
+    var lines = [];
 
     while (i < l) {
-      hex += ('00' + bytes[i].toString(16)).substr(-2) + ' ';
-      ascii += (bytes[i] >= 32 && bytes[i] <= 127) ? String.fromCharCode(bytes[i]) : '.';
+      b = bytes[i + i1];
+      hex += ('00' + b.toString(16)).substr(-2) + ' ';
+      ascii += (b >= 32 && b < 127) ? String.fromCharCode(b) : '.';
       i++;
 
       if (i % width == 0) {
-        out += hex + ' ' + ascii + '\n';
+        lines.push(hex + ' ' + ascii);
         hex = '';
         ascii = '';
       }
     }
 
-    if (i % 8 != 0) {
+    if (hex.length != 0) {
       while (ascii.length < width) {
         hex += '   ';
         ascii += ' ';
       }
-      out += hex + ' ' + ascii + '\n';
+      lines.push(hex + ' ' + ascii);
     }
 
-    return out;
+    return lines.join('\n');
+  }
+
+  self.toString = function() {
+    return self.dumpRange(0, bytes.length)[0];
+  }
+
+  self.dumpLastRead = function(name) {
+    var size = cursor - lastDump;
+    var out = self.dumpRange(lastDump, cursor);
+    lastDump = cursor;
+
+    console.group(name + ' (' + size + ' bytes)');
+    console.log(out);
+    console.groupEnd();
   }
 
   self.dump = function() {
     console.groupCollapsed(bytes.length + ' bytes');
-    console.log(self.toString());
+    console.log(out);
     console.groupEnd();
   }
-
 }

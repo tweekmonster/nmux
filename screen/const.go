@@ -2,6 +2,7 @@ package screen
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 )
 
@@ -46,7 +47,7 @@ const (
 var JSConst []byte
 
 func init() {
-	consts := map[string]int{}
+	consts := map[string]interface{}{}
 
 	o := OpEnd
 	for o > 0 {
@@ -55,7 +56,9 @@ func init() {
 		if strings.ContainsRune(s, '(') {
 			continue
 		}
-		consts[s] = int(o)
+
+		consts[s] = o
+		consts[fmt.Sprintf("o%d", o)] = s
 	}
 
 	a := AttrEnd
@@ -65,7 +68,8 @@ func init() {
 		if strings.ContainsRune(s, '(') {
 			continue
 		}
-		consts[s] = int(a)
+		consts[s] = a
+		consts[fmt.Sprintf("a%d", a)] = s
 	}
 
 	m := ModeEnd
@@ -75,7 +79,8 @@ func init() {
 		if strings.ContainsRune(s, '(') {
 			continue
 		}
-		consts[s] = int(m)
+		consts[s] = m
+		consts[fmt.Sprintf("m%d", m)] = s
 	}
 
 	data, err := json.Marshal(consts)
