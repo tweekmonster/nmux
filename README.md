@@ -16,7 +16,7 @@ $ go get -u github.com/tweekmonster/nmux/cmd/nmux
 ## Usage
 
 ```
-$ nmux --addr localhost:9999
+$ nmux --server --addr localhost:9999
 ```
 
 Then point your browser to [http://localhost:9999/](http://localhost:9999/)
