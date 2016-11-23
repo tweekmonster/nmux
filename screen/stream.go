@@ -44,6 +44,14 @@ func (s *Screen) write(p []byte) (int, error) {
 	return s.payload.Write(p)
 }
 
+func (s *Screen) writeLog(message string) {
+	s.writeByte(byte(OpLog))
+	s.writeEncodedInt(len(message))
+	for _, r := range message {
+		s.writeEncodedInt(int(r))
+	}
+}
+
 // writeRange sends a range of characters to render.  The ranges *must* have the
 // same display attributes.  A run of the same character will be sent as a
 // "condensed" operation.
@@ -54,6 +62,8 @@ func (s *Screen) writeRange(i1, i2 int) {
 	firstC := s.Buffer[i1].Char
 	runStart := 0
 	runEnd := 0
+
+	s.writeStyle(s.nextAttrs)
 
 	for i, c := range s.Buffer[i1:i2] {
 		if c.Char == firstC {
@@ -72,23 +82,23 @@ func (s *Screen) writeRange(i1, i2 int) {
 	}
 
 	send := make([]rune, i2-i1)
-	i := i1
-	j := 0
+	index := i1
+	length := 0
 
 	for _, r := range runs {
 		if r[1]-r[0] < 2 {
 			// Run is too short.
-			copy(send[j:], run[r[0]:r[1]])
-			j += r[1] - r[0]
+			copy(send[length:], run[r[0]:r[1]])
+			length += r[1] - r[0]
 		} else {
-			if j > 0 {
+			if length > 0 {
 				// Flush pending characters.
 				s.writeByte(byte(OpPut))
-				s.writeEncodedInt(i)
-				s.writeEncodedInt(j)
-				i += j
+				s.writeEncodedInt(index)
+				s.writeEncodedInt(length)
+				index += length
 
-				for _, c := range send[:j] {
+				for _, c := range send[:length] {
 					s.writeEncodedInt(int(c))
 				}
 			}
@@ -96,20 +106,20 @@ func (s *Screen) writeRange(i1, i2 int) {
 			// Getting here means that the run is long enough to send as a condensed
 			// render operation.
 			s.writeByte(byte(OpPutRep))
-			s.writeEncodedInt(i)
+			s.writeEncodedInt(index)
 			s.writeEncodedInt(r[1] - r[0])
 			s.writeEncodedInt(int(run[r[0]]))
 
-			i += r[1] - r[0]
-			j = 0
+			index += r[1] - r[0]
+			length = 0
 		}
 	}
 
-	if j > 0 {
+	if length > 0 {
 		s.writeByte(byte(OpPut))
-		s.writeEncodedInt(i)
-		s.writeEncodedInt(j)
-		for _, c := range send[:j] {
+		s.writeEncodedInt(index)
+		s.writeEncodedInt(length)
+		for _, c := range send[:length] {
 			s.writeEncodedInt(int(c))
 		}
 	}
@@ -127,9 +137,9 @@ func (s *Screen) writeScroll(delta int) {
 
 func (s *Screen) writeClear() {
 	// Clear the attribute counter of colors that are no longer used in the cells.
-	for attr := range s.attrCounter {
+	for attr, count := range s.attrCounter {
 		if attr.id != 0 {
-			if attr != s.CurAttrs {
+			if count <= 0 && attr != s.CurAttrs {
 				delete(s.attrCounter, attr)
 			}
 

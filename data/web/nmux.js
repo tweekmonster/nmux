@@ -105,16 +105,7 @@ new (function() {
           break;
 
         case nmux.OpPut:
-          var index = buf.eint32();
-          var len = buf.eint32();
-          var str = '';
-
-          while (len > 0) {
-            str += String.fromCharCode(buf.eint32());
-            len--;
-          }
-
-          scr.renderText(str, index);
+          scr.renderText(buf.eint32(), buf.string());
           break;
 
         case nmux.OpPutRep:
@@ -157,6 +148,10 @@ new (function() {
 
           scr.setCursor(mode, cx, cy, id, c);
           scr.showCursor();
+          break;
+
+        case nmux.OpLog:
+          console.info('[Server Log]', buf.string(len));
           break;
 
         default:

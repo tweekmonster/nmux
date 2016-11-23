@@ -69,6 +69,15 @@ var Reader = function(bytes) {
     return b;
   }
 
+  self.string = function() {
+    var len = self.eint32();
+    var out = '';
+    while (len--) {
+      out += String.fromCharCode(self.eint32());
+    }
+    return out;
+  }
+
   self.toEnd = function() {
     return bytes.subarray(cursor);
   }
@@ -135,13 +144,13 @@ var Reader = function(bytes) {
     lastDump = cursor;
 
     console.group(name + ' (' + size + ' bytes)');
-    console.log(out);
+    console.debug(out);
     console.groupEnd();
   }
 
   self.dump = function() {
     console.groupCollapsed(bytes.length + ' bytes');
-    console.log(out);
+    console.debug(out);
     console.groupEnd();
   }
 }

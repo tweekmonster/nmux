@@ -52,6 +52,9 @@ type Screen struct {
 	// Current attributes for new characters.
 	CurAttrs *CellAttrs
 
+	// The next CellAttrs to write out.
+	nextAttrs *CellAttrs
+
 	// To avoid assigning a new ID to previously seen attributes.  Cleared after
 	// nvim sends a clear command.
 	attrCounter map[*CellAttrs]int
@@ -105,32 +108,28 @@ func (s *Screen) SetSink(w io.Writer) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
+	// XXX: Need to investigate the command line prompt blocking screen updates.
 	s.flush()
-
-	s.sentAttrs = make(map[*CellAttrs]int)
-	s.lastSent = nil
-
 	s.sink = w
 
 	s.writeSize()
 	s.writeClear()
 
 	lastIndex := 0
-	lastCell := s.Buffer[0]
+	s.nextAttrs = s.Buffer[0].CellAttrs
 
 	for i, c := range s.Buffer {
-		if c.CellAttrs != lastCell.CellAttrs {
-			s.writeStyle(lastCell.CellAttrs)
+		if c.CellAttrs != s.nextAttrs {
 			s.writeRange(lastIndex, i)
 			lastIndex = i
-			lastCell = c
+			s.nextAttrs = c.CellAttrs
 		}
 	}
 
 	if lastIndex < len(s.Buffer) {
-		s.writeStyle(lastCell.CellAttrs)
 		s.writeRange(lastIndex, len(s.Buffer))
 	}
+	s.nextAttrs = s.CurAttrs
 
 	s.flush()
 }
@@ -145,12 +144,12 @@ func (s *Screen) flushPutOps() {
 
 func (s *Screen) setCellAttrs(index int, attrs *CellAttrs) {
 	cellAttr := s.Buffer[index].CellAttrs
-	if cellAttr != s.CurAttrs {
+	if cellAttr != attrs {
 		if cellAttr != nil {
 			s.attrCounter[cellAttr]--
 		}
-		s.attrCounter[s.CurAttrs]++
-		s.Buffer[index].CellAttrs = s.CurAttrs
+		s.attrCounter[attrs]++
+		s.Buffer[index].CellAttrs = attrs
 	}
 }
 

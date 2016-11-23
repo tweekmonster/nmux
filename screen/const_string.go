@@ -4,9 +4,9 @@ package screen
 
 import "fmt"
 
-const _Op_name = "OpResizeOpClearOpKeyboardOpCursorOpPaletteOpStyleOpPutOpPutRepOpScrollOpFlushOpEnd"
+const _Op_name = "OpResizeOpClearOpKeyboardOpCursorOpPaletteOpStyleOpPutOpPutRepOpScrollOpFlushOpLogOpEnd"
 
-var _Op_index = [...]uint8{0, 8, 15, 25, 33, 42, 49, 54, 62, 70, 77, 82}
+var _Op_index = [...]uint8{0, 8, 15, 25, 33, 42, 49, 54, 62, 70, 77, 82, 87}
 
 func (i Op) String() string {
 	i -= 1

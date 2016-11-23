@@ -19,6 +19,7 @@ const (
 	OpPutRep
 	OpScroll
 	OpFlush
+	OpLog
 	OpEnd
 )
 

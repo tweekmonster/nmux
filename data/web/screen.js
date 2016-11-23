@@ -280,7 +280,7 @@ var Screen = function() {
     renderAttrs(buffer.ctx, x, y, w);
   };
 
-  self.renderText = function(str, index) {
+  self.renderText = function(index, str) {
     var x = (index % gridW) * charW;
     var y = Math.floor(index / gridW) * charH;
     var w = str.length * charW;

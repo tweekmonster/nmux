@@ -95,7 +95,7 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 			e.id = 0
 			if attrs == e {
 				s.CurAttrs = existing
-				s.writeStyle(existing)
+				s.nextAttrs = existing
 				return
 			}
 		}
@@ -103,7 +103,7 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.attrID++
 		attrs.id = s.attrID
 		s.CurAttrs = &attrs
-		s.writeStyle(s.CurAttrs)
+		s.nextAttrs = s.CurAttrs
 
 	case "put":
 		i := s.Cursor.Y*s.Size.X + s.Cursor.X
@@ -214,7 +214,7 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 	case "popupmenu_hide":
 
 	default:
-		log.Println("Unknown redraw op:", op)
+		log.Printf("Unknown redraw op: %s, %#v", op, args.args)
 	}
 }
 
