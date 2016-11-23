@@ -49,8 +49,9 @@ func removeProcess(proc *Process) {
 
 type Process struct {
 	*screen.Screen
-	ID   int
-	nvim *nvim.Nvim
+	ID      int
+	Deadman <-chan int
+	nvim    *nvim.Nvim
 }
 
 type msg struct {
@@ -73,10 +74,12 @@ func NewProcess(cwd string, width, height int) (*Process, error) {
 	}
 
 	procs.id++
+	deadman := make(chan int)
 	proc := &Process{
-		ID:     procs.id,
-		nvim:   n,
-		Screen: screen.NewScreen(width, height),
+		ID:      procs.id,
+		nvim:    n,
+		Deadman: deadman,
+		Screen:  screen.NewScreen(width, height),
 	}
 
 	addProcess(proc)
@@ -87,6 +90,7 @@ func NewProcess(cwd string, width, height int) (*Process, error) {
 		}
 		proc.nvim = nil
 		removeProcess(proc)
+		close(deadman)
 		fmt.Println("Dead")
 	}()
 
@@ -110,9 +114,6 @@ func (p *Process) Input(keys string) (int, error) {
 	return p.nvim.Input(keys)
 }
 
-func (p *Process) Resize(w, h int) {
-	err := p.nvim.TryResizeUI(w, h)
-	if err != nil {
-		log.Println("Couldn't resize:", err)
-	}
+func (p *Process) Resize(w, h int) error {
+	return p.nvim.TryResizeUI(w, h)
 }

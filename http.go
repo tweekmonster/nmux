@@ -31,9 +31,27 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 
 func websocketHandler(ws *websocket.Conn) {
 	log.Println("Connection from:", ws.RemoteAddr())
+	ws.PayloadType = websocket.BinaryFrame
+
+	if proc == nil || !proc.IsRunning() {
+		p, err := NewProcess("", 80, 20)
+		if err != nil {
+			log.Println("Couldn't start process:", err)
+			return
+		}
+
+		proc = p
+	}
 
 	input := make(chan []byte)
-	ws.PayloadType = websocket.BinaryFrame
+
+	closeInput := func() {
+		// Close the input without panicking.
+		defer func() {
+			recover()
+		}()
+		close(input)
+	}
 
 	go func() {
 		var msg []byte
@@ -59,48 +77,49 @@ func websocketHandler(ws *websocket.Conn) {
 		}
 
 		log.Println("Input stopped")
-		close(input)
+		closeInput()
 	}()
 
-	if proc != nil && proc.IsRunning() {
-		proc.SetSink(ws)
-	}
+	proc.SetSink(ws)
 
-	for data := range input {
-		op := screen.Op(data[0])
+mainloop:
+	for {
+		select {
+		case _, ok := <-proc.Deadman:
+			if !ok {
+				log.Println("Process ended")
+				break mainloop
+			}
 
-		switch op {
-		case screen.OpResize:
-			cols := (int(data[1]) << 8) | int(data[2])
-			rows := (int(data[3]) << 8) | int(data[4])
+		case data, ok := <-input:
+			if !ok {
+				break mainloop
+			}
 
-			if proc != nil && proc.IsRunning() {
+			op := screen.Op(data[0])
+
+			switch op {
+			case screen.OpResize:
+				cols := (int(data[1]) << 8) | int(data[2])
+				rows := (int(data[3]) << 8) | int(data[4])
+
 				// XXX: This is the origin point of the deadlock mentioned above.
-				proc.Resize(cols, rows)
-			} else {
-				p, err := NewProcess("", cols, rows)
-				if err != nil {
-					log.Println("Proc Err:", err)
-				} else {
-					proc = p
-					proc.SetSink(ws)
+				if err := proc.Resize(cols, rows); err != nil {
+					log.Println("Couldn't resize:", err)
+					break mainloop
+				}
+			case screen.OpKeyboard:
+				if proc != nil && proc.IsRunning() {
+					if _, err := proc.Input(string(data[1:])); err != nil {
+						log.Println("Input Error:", err)
+						break mainloop
+					}
 				}
 			}
-
-		case screen.OpKeyboard:
-			if proc != nil && proc.IsRunning() {
-				proc.Input(string(data[1:]))
-			}
-
 		}
 	}
 
-	select {
-	case _, ok := <-input:
-		if ok {
-			close(input)
-		}
-	}
+	closeInput()
 
 	log.Println("Connection stopped:", ws.RemoteAddr())
 }
