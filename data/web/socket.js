@@ -93,5 +93,3 @@ nmux.socket = function(url) {
 
   connect();
 };
-
-nmux.socket.prototype = EventTarget
