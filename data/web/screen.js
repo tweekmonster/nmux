@@ -163,6 +163,10 @@ var Screen = function() {
     self.setAttributes(id);
     buffer.ctx.fillStyle = brush.bg;
     buffer.ctx.fillRect(0, 0, buffer.width, buffer.height);
+
+    if (debug) {
+      debug.width = debug.width;
+    }
   };
 
   function rgb(n) {
