@@ -22,6 +22,7 @@ var Screen = function() {
   var bgCache = {};
   var palette = {};
   var brush = null;
+  var repeatCache = {};
 
   // Global X coordinate for drawing undercurls whose ends meet regardless of
   // what canvs they're drawn on.
@@ -155,6 +156,7 @@ var Screen = function() {
   };
 
   self.clear = function(id, a, fg, bg, sp) {
+    repeatCache = {};
     palette = {};
     brush = null;
     self.setPalette(id, a, fg, bg, sp);
@@ -250,27 +252,21 @@ var Screen = function() {
     ctx.restore();
   }
 
-  var repeatCache = {};
-
   self.renderRepeatedText = function(c, index, len) {
     var x = (index % gridW) * charW;
     var y = Math.floor(index / gridW) * charH;
-    var k = brush.fg + brush.bg + brush.sp;
+    var k = c + brush.fg + brush.bg + brush.sp;
     var pat = repeatCache[k];
     var w = len * charW;
 
     gX = x;
 
-    if (c != ' ' || !pat) {
+    if (!pat) {
       var scr = scratch(charW, charH);
       renderChar(scr.ctx, 0, 0, c, brush.attr, brush.fg, brush.bg, brush.sp);
       debugRect(x, y, charW, charH, 0);
       pat = scr.ctx.createPattern(scr, 'repeat');
-
-      if (c == ' ') {
-        // Cache repeated spaces.
-        repeatCache[k] = pat;
-      }
+      repeatCache[k] = pat;
     }
 
     debugRect(x, y, w, charH, 1);
