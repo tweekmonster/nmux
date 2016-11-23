@@ -399,6 +399,7 @@ var Screen = function() {
     scr.ctx.drawImage(buffer, x1, y1, w, h, 0, -delta, w, h);
 
     if (debug) {
+      debugDraw();
       var ascr = scratchA(w, h);
       ascr.ctx.drawImage(debug, x1, y1, w, h, 0, -delta, w, h);
       debug.ctx.clearRect(x1, y1, w, h);
@@ -442,17 +443,19 @@ var Screen = function() {
   };
 
   function debugDraw() {
+    clearInterval(debugTimer);
+
     if (debugRects.length === 0) {
       return;
     }
 
     var r, c, i = 0, ctx = debug.ctx;
 
-    debug.ctx.save();
-    debug.ctx.globalAlpha = 0.8;
-    debug.ctx.globalCompositeOperation = 'destination-in';
-    debug.ctx.drawImage(debug, 0, 0);
-    debug.ctx.restore();
+    ctx.save();
+    ctx.globalAlpha = 0.8;
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(debug, 0, 0);
+    ctx.restore();
 
     while (debugRects.length) {
       r = debugRects.pop();
