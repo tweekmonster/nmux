@@ -43,8 +43,24 @@ new (function() {
     sock.send(new Uint8Array(payload));
   }
 
+  function store(name, value) {
+    if (value === null) {
+      return localStorage.removeItem(name);
+    }
+
+    if (arguments.length > 1) {
+      return localStorage.setItem(name, JSON.stringify(value));
+    }
+
+    try {
+      return JSON.parse(localStorage.getItem(name));
+    } catch (e) {}
+
+    return null;
+  }
+
   var firstRun = true;
-  var debug = false;
+  var debug = store('nmux.debug') || false;
 
   function messageHandler(e) {
     var buf = new Reader(e.data);
@@ -178,7 +194,8 @@ new (function() {
     // Meta-Shift-D enables debug.
     if (key === '<D-D>') {
       debug = !debug;
-      scr.toggleDebug();
+      store('nmux.debug', debug);
+      scr.setDebug(debug);
       return;
     }
 
@@ -203,6 +220,7 @@ new (function() {
   sock.binaryType = 'arraybuffer';
   sock.addEventListener('open', function() {
     resize();
+    scr.setDebug(debug);
 
     if (!sockInit) {
       window.addEventListener('resize', debounce(resize, 200));

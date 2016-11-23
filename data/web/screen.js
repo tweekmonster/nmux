@@ -412,8 +412,12 @@ var Screen = function() {
 
   var debugTimer = 0;
 
-  self.toggleDebug = function() {
-    if (!debug) {
+  self.setDebug = function(d) {
+    if (d) {
+      if (debug) {
+        return;
+      }
+
       debug = createCanvas(true, {'zIndex': 3, 'pointerEvents': 'none'}, true);
       debug.width = buffer.width;
       debug.height = buffer.height;
