@@ -32,10 +32,11 @@ type ScrollRegion struct {
 }
 
 type Screen struct {
-	mu     sync.Mutex
-	Size   Vector2 // Screen size.
-	Cursor Vector2 // Cursor postion.
-	Title  string
+	mu              sync.Mutex
+	Size            Vector2 // Screen size.
+	Cursor          Vector2 // Cursor postion.
+	lastCursorIndex int     // Last position of the set_cursor command.
+	Title           string
 
 	// Current mode.
 	Mode Mode
@@ -90,12 +91,13 @@ type Screen struct {
 func NewScreen(w, h int) *Screen {
 	attrs := &CellAttrs{}
 	s := &Screen{
-		charUpdate:   Vector2{0, -1},
-		DefaultAttrs: attrs,
-		CurAttrs:     attrs,
-		attrCounter:  make(map[*CellAttrs]int),
-		sentAttrs:    make(map[*CellAttrs]int),
-		Mode:         ModeNormal | ModeMouseOn,
+		lastCursorIndex: -1,
+		charUpdate:      Vector2{0, -1},
+		DefaultAttrs:    attrs,
+		CurAttrs:        attrs,
+		attrCounter:     make(map[*CellAttrs]int),
+		sentAttrs:       make(map[*CellAttrs]int),
+		Mode:            ModeNormal | ModeMouseOn,
 	}
 
 	s.setSize(w, h)
@@ -171,7 +173,17 @@ func (s *Screen) clearLine(x, y int) {
 func (s *Screen) setCursor(x, y int) {
 	s.Cursor.X = x
 	s.Cursor.Y = y
-	s.charUpdate.X = y*s.Size.X + x
+
+	prevIndex := s.lastCursorIndex
+	index := y*s.Size.X + x
+	s.lastCursorIndex = index
+	if prevIndex != -1 && index-prevIndex == 1 {
+		s.charUpdate.Y++
+		return
+	}
+
+	s.flushPutOps()
+	s.charUpdate.X = index
 	s.charUpdate.Y = -1
 }
 

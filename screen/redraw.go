@@ -36,7 +36,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.clearLine(s.Cursor.X, s.Cursor.Y)
 
 	case "cursor_goto":
-		s.flushPutOps()
 		y := args.Int()
 		x := args.Int()
 		s.setCursor(x, y)

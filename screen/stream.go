@@ -86,7 +86,7 @@ func (s *Screen) writeRange(i1, i2 int) {
 	length := 0
 
 	for _, r := range runs {
-		if r[1]-r[0] < 2 {
+		if r[1]-r[0] < 4 {
 			// Run is too short.
 			copy(send[length:], run[r[0]:r[1]])
 			length += r[1] - r[0]
