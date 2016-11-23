@@ -245,7 +245,7 @@ var Screen = function() {
     ctx.translate(x, y);
 
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, charW, charH);
+    ctx.fillRect(0, 0, charW * c.wcwidth(), charH);
 
     ctx.translate(0, charOffsetY - 2);
     ctx.fillStyle = fg;
@@ -261,14 +261,15 @@ var Screen = function() {
     var y = Math.floor(index / gridW) * charH;
     var k = c + brush.fg + brush.bg + brush.sp;
     var pat = repeatCache[k];
-    var w = len * charW;
+    var cw = charW * c.wcwidth();
+    var w = len * cw;
 
     gX = x;
 
     if (!pat) {
-      var scr = scratch(charW, charH);
+      var scr = scratch(cw, charH);
       renderChar(scr.ctx, 0, 0, c, brush.attr, brush.fg, brush.bg, brush.sp);
-      debugRect(x, y, charW, charH, 0);
+      debugRect(x, y, cw, charH, 0);
       pat = scr.ctx.createPattern(scr, 'repeat');
       repeatCache[k] = pat;
     }
@@ -348,17 +349,18 @@ var Screen = function() {
       return;
     }
 
-    cursor.style.left = (x * charW) + 'px';
-    cursor.style.top = (y * charH) + 'px';
-
+    c = String.fromCharCode(c);
+    var cw = charW * c.wcwidth();
     gX = x * charW;
+    cursor.width = cw;
+    cursor.style.left = gX + 'px';
+    cursor.style.top = (y * charH) + 'px';
 
     var a = b.attr;
     var fg = b.fg;
     var bg = b.bg;
     var sp = b.sp;
 
-    c = String.fromCharCode(c);
     cursorX = x;
     cursorY = y;
 
@@ -372,14 +374,14 @@ var Screen = function() {
     }
 
     renderChar(cursor.ctx, 0, 0, c, a, fg, bg, sp);
-    renderAttrs(cursor.ctx, 0, 0, charW, a, fg, bg, sp);
+    renderAttrs(cursor.ctx, 0, 0, cw, a, fg, bg, sp);
 
     if ((mode & nmux.ModeInsert) === nmux.ModeInsert) {
       cursor.ctx.fillStyle = fg;
       cursor.ctx.fillRect(0, 0, 1, charH);
     } else if ((mode & nmux.ModeReplace) === nmux.ModeReplace) {
       cursor.ctx.fillStyle = fg;
-      cursor.ctx.fillRect(0, charH - 3, charW, 3);
+      cursor.ctx.fillRect(0, charH - 3, cw, 3);
     }
   };
 

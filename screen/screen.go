@@ -5,6 +5,8 @@ import (
 	"log"
 	"runtime/debug"
 	"sync"
+
+	runewidth "github.com/mattn/go-runewidth"
 )
 
 type CellAttrs struct {
@@ -197,7 +199,12 @@ func (s *Screen) setChar(index int, c rune) {
 	s.Buffer[index].Char = c
 	s.setCellAttrs(index, s.CurAttrs)
 
-	index++
+	var w = runewidth.RuneWidth(c)
+	if w == 2 {
+		s.Buffer[index+1].Char = ' '
+		s.setCellAttrs(index+1, s.CurAttrs)
+	}
+	index += w
 	if s.charTracking {
 		s.charUpdate.Y = index
 	}
