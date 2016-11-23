@@ -193,27 +193,32 @@ new (function() {
       out[i + 1] = key.charCodeAt(i);
     }
 
-    sock.send(data);
+    if (!sock.send(data)) {
+      sock.connect();
+    }
   }
 
-  // TODO: Retry on disconnect.
-  sock = new WebSocket(socketURL('/nmux'));
+  var sockInit = false;
+  sock = new nmux.socket(socketURL('/nmux'));
   sock.binaryType = 'arraybuffer';
   sock.addEventListener('open', function() {
     resize();
 
-    window.addEventListener('resize', debounce(resize, 200));
-    window.addEventListener('keydown', keyHandler);
-    scr.addEventListener('mousedown', keyHandler);
-    scr.addEventListener('mouseup', keyHandler);
-    scr.addEventListener('mousemove', keyHandler);
-    scr.addEventListener('wheel', keyHandler);
-    scr.addEventListener('contextmenu', function(e) {
-      e.preventDefault();
-      e.stopPropagation();
-    });
+    if (!sockInit) {
+      window.addEventListener('resize', debounce(resize, 200));
+      window.addEventListener('keydown', keyHandler);
+      scr.addEventListener('mousedown', keyHandler);
+      scr.addEventListener('mouseup', keyHandler);
+      scr.addEventListener('mousemove', keyHandler);
+      scr.addEventListener('wheel', keyHandler);
+      scr.addEventListener('contextmenu', function(e) {
+        e.preventDefault();
+        e.stopPropagation();
+      });
 
-    sock.addEventListener('message', messageHandler);
+      sock.addEventListener('message', messageHandler);
+      sockInit = true;
+    }
   });
 
   window.sock = sock;
