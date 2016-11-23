@@ -434,7 +434,7 @@ var Screen = function() {
       debug.ctx.fillStyle = '#000';
       debug.ctx.fillText(msg, charW * 2, charH);
       debug.ctx.restore();
-    } else {
+    } else if (debug) {
       debugRects = [];
       debug.parentNode.removeChild(debug);
       debug = null;
