@@ -171,25 +171,61 @@ func (s *Screen) flush() error {
 		// Insert the palette into the data if there are new colors that haven't
 		// been sent before.
 		var pn int
+		var attrs []*CellAttrs
+		var cid int
+		var colors []Color
+		cmap := map[Color]int{}
+
 		defer s.buf.Truncate(0)
 
 		for attr := range s.sentAttrs {
 			if s.sentAttrs[attr] == 0 {
 				s.sentAttrs[attr]++
+				attrs = append(attrs, attr)
+
+				if _, ok := cmap[attr.Fg]; !ok {
+					colors = append(colors, attr.Fg)
+					cmap[attr.Fg] = cid
+					cid++
+				}
+
+				if _, ok := cmap[attr.Bg]; !ok {
+					colors = append(colors, attr.Bg)
+					cmap[attr.Bg] = cid
+					cid++
+				}
+
+				if _, ok := cmap[attr.Sp]; !ok {
+					colors = append(colors, attr.Sp)
+					cmap[attr.Sp] = cid
+					cid++
+				}
+
 				pn++
-				s.buf.WriteEncodedInt(int(attr.id))
-				s.buf.WriteByte(byte(attr.Attrs))
-				s.buf.WriteEncodedInts(int(attr.Fg), int(attr.Bg), int(attr.Sp))
 			}
 		}
 
 		if pn > 0 {
-			pnb := EncodedInt(pn)
-			offset := 1 + len(pnb) + s.buf.Len()
+			s.buf.WriteEncodedInt(cid)
+
+			for _, color := range colors {
+				s.buf.WriteColor(color)
+			}
+
+			s.buf.WriteEncodedInt(len(attrs))
+
+			for _, attr := range attrs {
+				s.buf.WriteEncodedInt(int(attr.id))
+				s.buf.WriteByte(byte(attr.Attrs))
+				s.buf.WriteEncodedInt(cmap[attr.Fg])
+				s.buf.WriteEncodedInt(cmap[attr.Bg])
+				s.buf.WriteEncodedInt(cmap[attr.Sp])
+			}
+
+			offset := 1 + s.buf.Len()
 			palette := make([]byte, offset+len(data))
 			ps := palette[:s.clearEnd]
 			ps = append(ps, byte(OpPalette))
-			ps = append(ps, pnb...)
 			ps = append(ps, s.buf.Bytes()...)
 
 			copy(palette[:s.clearEnd+offset], data[:s.clearEnd])

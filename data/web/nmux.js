@@ -88,13 +88,19 @@ new (function() {
           break;
 
         case nmux.OpPalette:
-          var id, a, fg, bg, sp, len = buf.eint32();;
+          var cmap = [];
+          var cmapLen = buf.eint32();
+          while (cmapLen--) {
+            cmap.push(buf.eint32());
+          }
+
+          var id, a, fg, bg, sp, len = buf.eint32();
           while (len > 0) {
             id = buf.eint32();
             a = buf.uint8();
-            fg = buf.eint32();
-            bg = buf.eint32();
-            sp = buf.eint32();
+            fg = cmap[buf.eint32()];
+            bg = cmap[buf.eint32()];
+            sp = cmap[buf.eint32()];
             scr.setPalette(id, a, fg, bg, sp);
             len--;
           }
