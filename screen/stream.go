@@ -3,53 +3,9 @@ package screen
 // TODO: There should be a buffer that's managed elsewhere that this can
 // unconditionally write to.
 
-func (s *Screen) writeByte(c byte) error {
-	return s.payload.WriteByte(c)
-}
-
-func (s *Screen) writeRune(r rune) (int, error) {
-	return s.payload.WriteRune(r)
-}
-
-// encodedInt creates 1-5 bytes representing a 32 bit integer depending on the
-// value.  This allows for integers to be sent using only the bytes necessary to
-// represent their values, instead of using a fixed byte size.
-// Each byte contributes 7 bits, with the high bit (0x80) used to indicate that
-// the next byte contributes to the value.
-func (s *Screen) encodedInt(n int) []byte {
-	var b [5]byte
-	i := 0
-	e := uint32(n)
-	if e == 0 {
-		return []byte{0}
-	}
-
-	for e != 0 {
-		b[i] = byte(e)
-		e >>= 7
-		if e != 0 {
-			b[i] |= 0x80
-		}
-		i++
-	}
-
-	return b[:i]
-}
-
-func (s *Screen) writeEncodedInt(n int) (int, error) {
-	return s.write(s.encodedInt(n))
-}
-
-func (s *Screen) write(p []byte) (int, error) {
-	return s.payload.Write(p)
-}
-
 func (s *Screen) writeLog(message string) {
-	s.writeByte(byte(OpLog))
-	s.writeEncodedInt(len(message))
-	for _, r := range message {
-		s.writeEncodedInt(int(r))
-	}
+	s.payload.WriteOp(OpLog)
+	s.payload.WriteStringRun(message)
 }
 
 // writeRange sends a range of characters to render.  The ranges *must* have the
@@ -84,6 +40,7 @@ func (s *Screen) writeRange(i1, i2 int) {
 	send := make([]rune, i2-i1)
 	index := i1
 	length := 0
+	p := s.payload
 
 	for _, r := range runs {
 		if r[1]-r[0] < 4 {
@@ -93,22 +50,18 @@ func (s *Screen) writeRange(i1, i2 int) {
 		} else {
 			if length > 0 {
 				// Flush pending characters.
-				s.writeByte(byte(OpPut))
-				s.writeEncodedInt(index)
-				s.writeEncodedInt(length)
+				p.WriteOp(OpPut)
+				p.WriteEncodedInt(index)
+				p.WriteRuneRun(send[:length])
 				index += length
-
-				for _, c := range send[:length] {
-					s.writeEncodedInt(int(c))
-				}
 			}
 
 			// Getting here means that the run is long enough to send as a condensed
 			// render operation.
-			s.writeByte(byte(OpPutRep))
-			s.writeEncodedInt(index)
-			s.writeEncodedInt(r[1] - r[0])
-			s.writeEncodedInt(int(run[r[0]]))
+			p.WriteOp(OpPutRep)
+			p.WriteEncodedInt(index)
+			p.WriteEncodedInt(r[1] - r[0])
+			p.WriteEncodedInt(int(run[r[0]]))
 
 			index += r[1] - r[0]
 			length = 0
@@ -116,23 +69,19 @@ func (s *Screen) writeRange(i1, i2 int) {
 	}
 
 	if length > 0 {
-		s.writeByte(byte(OpPut))
-		s.writeEncodedInt(index)
-		s.writeEncodedInt(length)
-		for _, c := range send[:length] {
-			s.writeEncodedInt(int(c))
-		}
+		p.WriteOp(OpPut)
+		p.WriteEncodedInt(index)
+		p.WriteRuneRun(send[:length])
 	}
+
 }
 
 func (s *Screen) writeScroll(delta int) {
-	s.writeByte(byte(OpScroll))
-	s.write(s.DefaultAttrs.Bg.Bytes())
-	s.write([]byte{byte(delta >> 8), byte(delta)})
-	s.writeEncodedInt(s.scroll.tl.Y)
-	s.writeEncodedInt(s.scroll.br.Y)
-	s.writeEncodedInt(s.scroll.tl.X)
-	s.writeEncodedInt(s.scroll.br.X)
+	p := s.payload
+	p.WriteOp(OpScroll)
+	p.Write(s.DefaultAttrs.Bg.Bytes())
+	p.Write([]byte{byte(delta >> 8), byte(delta)})
+	p.WriteEncodedInts(s.scroll.tl.Y, s.scroll.br.Y, s.scroll.tl.X, s.scroll.br.X)
 }
 
 func (s *Screen) writeClear() {
@@ -151,18 +100,19 @@ func (s *Screen) writeClear() {
 
 	s.lastSent = nil
 
-	s.writeByte(byte(OpClear))
+	p := s.payload
+	p.WriteOp(OpClear)
 
 	attr := s.DefaultAttrs
 	// Clear is a special case that receives the default colors before resetting
 	// the palette on the client side.
-	s.writeEncodedInt(int(attr.id))
-	s.writeByte(byte(attr.Attrs))
-	s.write(attr.Fg.Bytes())
-	s.write(attr.Bg.Bytes())
-	s.write(attr.Sp.Bytes())
+	p.WriteEncodedInt(int(attr.id))
+	p.WriteByte(byte(attr.Attrs))
+	p.Write(attr.Fg.Bytes())
+	p.Write(attr.Bg.Bytes())
+	p.Write(attr.Sp.Bytes())
 
-	s.clearEnd = s.payload.Len()
+	s.clearEnd = p.Len()
 }
 
 func (s *Screen) writeStyle(cur *CellAttrs) {
@@ -172,16 +122,15 @@ func (s *Screen) writeStyle(cur *CellAttrs) {
 			s.sentAttrs[cur] = 0
 		}
 
-		s.writeByte(byte(OpStyle))
-		s.writeEncodedInt(int(cur.id))
+		s.payload.WriteOp(OpStyle)
+		s.payload.WriteEncodedInt(int(cur.id))
 		s.lastSent = cur
 	}
 }
 
 func (s *Screen) writeSize() {
-	s.writeByte(byte(OpResize))
-	s.writeEncodedInt(int(s.Size.X))
-	s.writeEncodedInt(int(s.Size.Y))
+	s.payload.WriteOp(OpResize)
+	s.payload.WriteEncodedInts(s.Size.X, s.Size.Y)
 }
 
 // Flush the operations and send the final state and cursor position along with
@@ -190,7 +139,8 @@ func (s *Screen) writeSize() {
 func (s *Screen) writeFlush() {
 	s.flushPutOps()
 
-	s.writeByte(byte(OpFlush))
+	p := s.payload
+	p.WriteOp(OpFlush)
 
 	state := s.Mode
 	if s.Busy {
@@ -201,54 +151,50 @@ func (s *Screen) writeFlush() {
 		state |= ModeMouseOn
 	}
 
-	s.writeEncodedInt(int(state))
-	s.writeEncodedInt(s.Cursor.X)
-	s.writeEncodedInt(s.Cursor.Y)
-
 	i := s.Cursor.Y*s.Size.X + s.Cursor.X
 	if i > len(s.Buffer) {
 		i = len(s.Buffer) - 1
 	}
 	c := s.Buffer[i]
-	s.writeEncodedInt(int(c.id))
-	s.writeEncodedInt(int(c.Char))
+
+	p.WriteEncodedInts(int(state), s.Cursor.X, s.Cursor.Y, int(c.id), int(c.Char))
 }
 
 // Flush operations into the sink.
 func (s *Screen) flush() error {
 	s.writeFlush()
+	defer s.payload.Truncate(0)
 
-	data := make([]byte, s.payload.Len())
-	copy(data, s.payload.Bytes())
-	s.payload.Truncate(0)
+	data := s.payload.Bytes()
 
 	if s.sink != nil {
 		// Insert the palette into the data if there are new colors that haven't
 		// been sent before.
 		var pn int
+		defer s.buf.Truncate(0)
+
 		for attr := range s.sentAttrs {
 			if s.sentAttrs[attr] == 0 {
 				s.sentAttrs[attr]++
 				pn++
-				s.writeEncodedInt(int(attr.id))
-				s.writeByte(byte(attr.Attrs))
-				s.writeEncodedInt(int(attr.Fg))
-				s.writeEncodedInt(int(attr.Bg))
-				s.writeEncodedInt(int(attr.Sp))
+				s.buf.WriteEncodedInt(int(attr.id))
+				s.buf.WriteByte(byte(attr.Attrs))
+				s.buf.WriteEncodedInts(int(attr.Fg), int(attr.Bg), int(attr.Sp))
 			}
 		}
 
 		if pn > 0 {
-			palette := []byte{byte(OpPalette)}
-			palette = append(palette, s.encodedInt(pn)...)
-			palette = append(palette, s.payload.Bytes()...)
-			if s.clearEnd > 0 {
-				palette = append(palette, data[s.clearEnd:]...)
-				data = append(data[:s.clearEnd], palette...)
-			} else {
-				data = append(palette, data...)
-			}
-			s.payload.Truncate(0)
+			pnb := EncodedInt(pn)
+			offset := 1 + len(pnb) + s.buf.Len()
+			palette := make([]byte, offset+len(data))
+			ps := palette[:s.clearEnd]
+			ps = append(ps, byte(OpPalette))
+			ps = append(ps, pnb...)
+			ps = append(ps, s.buf.Bytes()...)
+
+			copy(palette[:s.clearEnd+offset], data[:s.clearEnd])
+			copy(palette[s.clearEnd+offset:], data[s.clearEnd:])
+			data = palette
 		}
 
 		if _, err := s.sink.Write(data); err != nil {

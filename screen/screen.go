@@ -1,7 +1,6 @@
 package screen
 
 import (
-	"bytes"
 	"io"
 	"log"
 	"runtime/debug"
@@ -83,13 +82,15 @@ type Screen struct {
 	// the palette to be injected right after.
 	clearEnd int
 
-	payload bytes.Buffer
+	payload *StreamBuffer
+	buf     *StreamBuffer // Reusable buffer for writing palette data.
 	sink    io.Writer
 }
 
 // NewScreen creates a new screen.
 func NewScreen(w, h int) *Screen {
 	attrs := &CellAttrs{}
+
 	s := &Screen{
 		lastCursorIndex: -1,
 		charUpdate:      Vector2{0, -1},
@@ -98,6 +99,8 @@ func NewScreen(w, h int) *Screen {
 		attrCounter:     make(map[*CellAttrs]int),
 		sentAttrs:       make(map[*CellAttrs]int),
 		Mode:            ModeNormal | ModeMouseOn,
+		payload:         &StreamBuffer{},
+		buf:             &StreamBuffer{},
 	}
 
 	s.setSize(w, h)
