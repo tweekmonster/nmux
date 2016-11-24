@@ -152,7 +152,7 @@ func (s *Screen) writeFlush() {
 	}
 
 	i := s.Cursor.Y*s.Size.X + s.Cursor.X
-	if i > len(s.Buffer) {
+	if i >= len(s.Buffer) {
 		i = len(s.Buffer) - 1
 	}
 	c := s.Buffer[i]
