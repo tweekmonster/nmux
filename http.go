@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/tweekmonster/nmux/screen"
+	"github.com/tweekmonster/nmux/util"
 
 	"golang.org/x/net/websocket"
 )
@@ -30,13 +31,14 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 }
 
 func websocketHandler(ws *websocket.Conn) {
-	log.Println("Connection from:", ws.RemoteAddr())
+	util.Print("Connection from:", ws.RemoteAddr())
 	ws.PayloadType = websocket.BinaryFrame
 
 	if proc == nil || !proc.IsRunning() {
-		p, err := NewProcess("", 80, 20)
+		util.Debug("Starting nvim process")
+		p, err := NewProcess("/tmp", 80, 20)
 		if err != nil {
-			log.Println("Couldn't start process:", err)
+			util.Print("Couldn't start process:", err)
 			return
 		}
 
@@ -54,6 +56,7 @@ func websocketHandler(ws *websocket.Conn) {
 	}
 
 	go func() {
+		util.Debug("Starting input loop")
 		var msg []byte
 	loop:
 		for {
@@ -61,7 +64,7 @@ func websocketHandler(ws *websocket.Conn) {
 			if err == io.EOF {
 				break loop
 			} else if err != nil {
-				log.Println("WebSocket Err:", err)
+				util.Print("WebSocket Err:", err)
 				break loop
 			} else {
 				select {
@@ -70,13 +73,13 @@ func websocketHandler(ws *websocket.Conn) {
 					// XXX: Needs investigation.  Occurs when a client reconnects and
 					// sends a key event while nvim is prompting in the command line.
 					// e.g. "swap recovery" prompt.
-					log.Println("Input deadlock?")
+					util.Print("Input deadlock?")
 					break loop
 				}
 			}
 		}
 
-		log.Println("Input stopped")
+		util.Print("Input stopped")
 		closeInput()
 	}()
 
@@ -87,7 +90,7 @@ mainloop:
 		select {
 		case _, ok := <-proc.Deadman:
 			if !ok {
-				log.Println("Process ended")
+				util.Print("Process ended")
 				break mainloop
 			}
 
@@ -105,13 +108,13 @@ mainloop:
 
 				// XXX: This is the origin point of the deadlock mentioned above.
 				if err := proc.Resize(cols, rows); err != nil {
-					log.Println("Couldn't resize:", err)
+					util.Print("Couldn't resize:", err)
 					break mainloop
 				}
 			case screen.OpKeyboard:
 				if proc != nil && proc.IsRunning() {
 					if _, err := proc.Input(string(data[1:])); err != nil {
-						log.Println("Input Error:", err)
+						util.Print("Input Error:", err)
 						break mainloop
 					}
 				}
@@ -121,7 +124,7 @@ mainloop:
 
 	closeInput()
 
-	log.Println("Connection stopped:", ws.RemoteAddr())
+	util.Print("Connection stopped:", ws.RemoteAddr())
 }
 
 func WebServer(addr string) (io.Closer, error) {
@@ -153,9 +156,11 @@ func WebServer(addr string) (io.Closer, error) {
 		return nil, err
 	}
 
+	util.Debug("Listening on", server.Addr)
+
 	go func() {
 		if err := server.Serve(tcpKeepAliveListener{listener.(*net.TCPListener)}); err != nil {
-			log.Println("Server Error:", err)
+			util.Print("Server Error:", err)
 		}
 	}()
 
