@@ -8,12 +8,19 @@ import (
 	"syscall"
 
 	"github.com/tweekmonster/nmux"
+	"github.com/tweekmonster/nmux/gui"
 )
 
 func main() {
+	server := flag.Bool("server", false, "Run as server")
 	addr := flag.String("addr", ":9999", "addr:port to listen on")
 
 	flag.Parse()
+
+	if !*server {
+		gui.Main()
+		return
+	}
 
 	if addr == nil {
 		flag.PrintDefaults()
