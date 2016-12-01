@@ -79,7 +79,8 @@ func (s *Screen) writeRange(i1, i2 int) {
 func (s *Screen) writeScroll(delta int) {
 	p := s.payload
 	p.WriteOp(OpScroll)
-	p.Write(s.DefaultAttrs.Bg.Bytes())
+
+	p.WriteEncodedInt(int(s.DefaultAttrs.Bg))
 	p.Write([]byte{byte(delta >> 8), byte(delta)})
 	p.WriteEncodedInts(s.scroll.tl.Y, s.scroll.br.Y, s.scroll.tl.X, s.scroll.br.X)
 }
@@ -108,9 +109,7 @@ func (s *Screen) writeClear() {
 	// the palette on the client side.
 	p.WriteEncodedInt(int(attr.id))
 	p.WriteByte(byte(attr.Attrs))
-	p.Write(attr.Fg.Bytes())
-	p.Write(attr.Bg.Bytes())
-	p.Write(attr.Sp.Bytes())
+	p.WriteEncodedInts(int(attr.Fg), int(attr.Bg), int(attr.Sp))
 
 	s.clearEnd = p.Len()
 }

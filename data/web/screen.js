@@ -21,7 +21,7 @@ var Screen = function() {
   var cursorY = 0;
   var bgCache = {};
   var palette = {};
-  var brush = null;
+  var brush = {};
   var repeatCache = {};
 
   // Global X coordinate for drawing undercurls whose ends meet regardless of
@@ -158,7 +158,7 @@ var Screen = function() {
   self.clear = function(id, a, fg, bg, sp) {
     repeatCache = {};
     palette = {};
-    brush = null;
+    brush = {};
     self.setPalette(id, a, fg, bg, sp);
     self.setAttributes(id);
     buffer.ctx.fillStyle = brush.bg;
@@ -173,6 +173,26 @@ var Screen = function() {
     return '#' + ('000000' + n.toString(16)).substr(-6);
   }
 
+  // TODO: User configurable default fg and bg.
+  function fg_rgb(n) {
+    if (n < 0) {
+      return '#ffffff';
+    }
+    return rgb(n);
+  }
+
+  function bg_rgb(n) {
+    if (n < 0) {
+      return '#000000';
+    }
+    return rgb(n);
+  }
+
+  function sp_rgb(n) {
+    // XXX: Does special always default to fg?
+    return fg_rgb(n);
+  }
+
   function rgba(n, a) {
     return 'rgba(' + (n >> 16) + ',' + ((n >> 8) & 0xff) + ',' + (n & 0xff) + ',' + a + ')';
   }
@@ -180,14 +200,24 @@ var Screen = function() {
   self.setPalette = function(id, a, fg, bg, sp) {
     palette[id] = {
       'attr': a,
-      'fg': rgb(fg),
-      'bg': rgb(bg),
-      'sp': rgb(sp),
+      'fg': fg_rgb(fg),
+      'bg': bg_rgb(bg),
+      'sp': sp_rgb(sp),
     };
   };
 
   self.setAttributes = function(id) {
-    brush = palette[id];
+    var b = palette[id];
+    brush = {};
+    brush.attr = b.attr;
+    brush.sp = b.sp;
+    if ((b.attr & nmux.AttrReverse) === nmux.AttrReverse) {
+      brush.fg = b.bg;
+      brush.bg = b.fg;
+    } else {
+      brush.fg = b.fg;
+      brush.bg = b.bg;
+    }
   };
 
   function setFont(ctx, a) {
@@ -361,6 +391,11 @@ var Screen = function() {
     var bg = b.bg;
     var sp = b.sp;
 
+    if ((b.attr & nmux.AttrReverse) === nmux.AttrReverse) {
+      fg = b.bg;
+      bg = b.fg;
+    }
+
     cursorX = x;
     cursorY = y;
 
@@ -395,8 +430,9 @@ var Screen = function() {
     y1 *= charH;
 
     var scr = scratch(w, h);
+    bg = bg_rgb(bg);
 
-    scr.ctx.fillStyle = rgb(bg);
+    scr.ctx.fillStyle = bg;
     scr.ctx.fillRect(0, 0, w, h);
     scr.ctx.drawImage(buffer, x1, y1, w, h, 0, -delta, w, h);
 
@@ -408,7 +444,7 @@ var Screen = function() {
       debug.ctx.drawImage(ascr, x1, y1);
     }
 
-    buffer.ctx.fillStyle = rgb(bg);
+    buffer.ctx.fillStyle = bg;
     buffer.ctx.fillRect(x1, y1, w, h);
     buffer.ctx.drawImage(scr, x1, y1);
   };
