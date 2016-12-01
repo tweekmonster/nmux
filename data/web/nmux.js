@@ -123,7 +123,7 @@ new (function() {
           break;
 
         case nmux.OpScroll:
-          var tmpBg = buf.uint24();
+          var tmpBg = buf.eint32();
           var delta = buf.int16();
           var top = buf.eint32();
           var bottom = buf.eint32();
@@ -137,9 +137,9 @@ new (function() {
           var id, a, fg, bg, sp;
           id = buf.eint32();
           a = buf.uint8();
-          fg = buf.uint24();
-          bg = buf.uint24();
-          sp = buf.uint24();
+          fg = buf.eint32();
+          bg = buf.eint32();
+          sp = buf.eint32();
           scr.clear(id, a, fg, bg, sp);
           break;
 
