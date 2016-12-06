@@ -7,6 +7,7 @@ XGO_BUILD_TARGETS := $(foreach t,$(XGO_TARGETS),$(DIST)/$(shell echo "$(t)" \
 	| sed 's!\(.*\)/\(.*\)!\2/\1!')/nmux)
 XGO_BUILD_TARGETS := $(foreach t,$(XGO_BUILD_TARGETS), \
 	$(shell echo "$(t)" | sed 's!.*windows.*!&.exe!'))
+ADDR := "127.0.0.1:9999"
 
 .PHONY: all clean generate run-server run-gui
 
@@ -15,15 +16,17 @@ all: $(DIST) generate $(XGO_BUILD_TARGETS)
 clean:
 	rm -rf $(DIST)
 
-quick-build: $(DIST)
-	go build -o $(DIST)/nmux ./cmd/nmux
+run-gui: $(DIST)
+	go build -o $(DIST)/nmux-client ./cmd/nmux
+	-$(DIST)/nmux-client --addr="$(ADDR)"
+	rm $(DIST)/nmux-client
 
-run-gui: quick-build
-	$(DIST)/nmux
-
-run-server: quick-build
-	-cd /tmp && $(DIST)/nmux --server --addr="127.0.0.1:9999"
-	rm $(DIST)/nmux
+run-server: $(DIST)
+	go build -o $(DIST)/nmux-server ./cmd/nmux
+	@# Running from /tmp until I can figure out why prompts causes the API to
+	@# become unresponsive.
+	-cd /tmp && $(DIST)/nmux-server --server --addr="$(ADDR)"
+	rm $(DIST)/nmux-server
 
 generate:
 	go generate

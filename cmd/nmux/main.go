@@ -18,7 +18,7 @@ func main() {
 	flag.Parse()
 
 	if !*server {
-		gui.Main()
+		gui.Main(*addr)
 		return
 	}
 
