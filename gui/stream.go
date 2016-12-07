@@ -7,13 +7,29 @@ type StreamReader struct {
 	cursor int
 }
 
-func (s *StreamReader) ReadOp() screen.Op {
-	op := screen.Op(s.Data[s.cursor])
-	s.cursor++
-	return op
+func (s *StreamReader) Remaining() int {
+	return len(s.Data) - s.cursor
 }
 
-func (s *StreamReader) Eint32() int {
+func (s *StreamReader) ReadOp() screen.Op {
+	return screen.Op(s.ReadUint8())
+}
+
+func (s *StreamReader) ReadUint8() uint8 {
+	b := s.Data[s.cursor]
+	s.cursor++
+	return b
+}
+
+func (s *StreamReader) ReadInt16() int16 {
+	return int16(s.ReadUint8())<<8 | int16(s.ReadUint8())
+}
+
+func (s *StreamReader) ReadUint24() int {
+	return int(s.ReadUint8())<<16 | int(s.ReadUint8())<<8 | int(s.ReadUint8())
+}
+
+func (s *StreamReader) ReadEint32() int {
 	i := int(s.Data[s.cursor])
 
 	if (i & 0x80) == 0 {
@@ -45,10 +61,10 @@ func (s *StreamReader) Eint32() int {
 }
 
 func (s *StreamReader) ReadString() string {
-	length := s.Eint32()
+	length := s.ReadEint32()
 	out := ""
 	for i := 0; i < length; i++ {
-		out += string(s.Eint32())
+		out += string(s.ReadEint32())
 	}
 
 	return out

@@ -11,10 +11,13 @@
 #define appStopped() NSLog(@"appStopped")
 #define appHidden() NSLog(@"appHidden")
 #define inputEvent(win, key) NSLog(@"inputEvent: %lu - %s", win, key)
-#define winMoved(win, x, y, w, h) NSLog(@"winMoved: %lu - Pos: %ldx%ld, Size: %ldx%ld", win, x, y, w, h)
+#define winMoved(win, x, y) NSLog(@"winMoved: %lu - Pos: %dx%d", win, x, y)
+#define winResized(win, w, h, gw, gh) NSLog(@"winResized: %lu - Size: %dx%d, Grid: %dx%d", win, w, h, gw, gh)
 #define winClosed(win) NSLog(@"winClosed: %lu", win)
 #define winFocused(win) NSLog(@"winFocused: %lu", win)
 #define winFocusLost(win) NSLog(@"winFocusLost: %lu", win)
+#define appMenuSelected(title) NSLog(@"appMenuSelected: %s", title)
+#define windowMenuSelected(win, title) NSLog(@"windowMenuSelected: %lu, '%s'", win, title)
 
 // Don't use GCD when running standalone.
 #define DISPATCH_S(block) (block)()
@@ -41,9 +44,19 @@ typedef struct {
   int32_t sp;
 } TextAttr;
 
+typedef struct TP {
+  unichar c;
+  int length;
+  TextAttr attrs;
+  CGPatternRef pattern;
+  struct TP *next;
+} TextPattern;
+
+static TextPattern *firstPattern = NULL;
+
 static NSFont *font;
 static NSSize cellSize;
-static NSSize minWinSize;
+static NSSize minGridSize = {80, 20};
 static NSRect lastWinFrame;
 
 
@@ -56,7 +69,8 @@ static NSRect lastWinFrame;
 + (CGFloat)descent;
 + (CGFloat)firstCharPos;
 + (NSSize)cellSize;
-+ (NSSize)minWinSize;
++ (NSSize)minGridSize;
++ (NSSize)fitGrid:(NSSize)size;
 
 + (void)setLastWinFrame:(NSRect)frame;
 + (NSRect)lastWinFrame;
@@ -77,6 +91,16 @@ static NSRect lastWinFrame;
 
 + (DrawTextOp *)opWithText:(const char *)text x:(int)x y:(int)y
                      attrs:(TextAttr)attrs;
+@end
+
+@interface DrawRepeatedTextOp : DrawOp; // {{{2
+
+@property (atomic) unichar character;
+@property (atomic) int length;
+
++ (DrawRepeatedTextOp *)opWithCharacter:(unichar)c length:(int)length x:(int)x y:(int)y
+                                  attrs:(TextAttr)attrs;
+
 @end
 
 
@@ -116,17 +140,32 @@ static NSRect lastWinFrame;
   size_t runMaxLength;
 }
 
+@property (atomic) NSSize grid;
+
+- (void)setGridSize:(NSSize)size;
 - (void)addDrawOp:(DrawOp *)op;
 - (void)flushDrawOps;
 @end
 
 
 @interface AppDelegate : NSObject <NSApplicationDelegate> // {{{2
-- (void)newWindow:(id)action;
+- (void)applicationMenuSelected:(NSMenuItem *)menu;
 @end
 
 
 #pragma mark - Helper Functions {{{1
+static inline NSSize NSSizeMultiply(NSSize s1, NSSize s2) {
+  s1.width *= s2.width;
+  s1.height *= s2.height;
+  return s1;
+}
+
+static inline NSSize NSSizeDivide(NSSize s1, NSSize s2) {
+  s1.width /= s2.width;
+  s1.height /= s2.height;
+  return s1;
+}
+
 static inline NSMutableString * mouse_name(NSEvent *event) {
   NSString *name;
   switch ([event buttonNumber]) {
@@ -160,8 +199,8 @@ static inline NSMenu * create_app_menu() {// {{{
   [menubar addItem:topItem];
 
   NSMenu *submenu = [[NSMenu new] autorelease];
-  menu_item(submenu, @"New Window", @selector(newWindow:), @"n");
-  menu_item(submenu, @"Close", @selector(performClose:), @"w");
+  menu_item(submenu, @"New Window", @selector(applicationMenuSelected:), @"n");
+  menu_item(submenu, @"Close", @selector(applicationMenuSelected:), @"w");
   menu_item(submenu, [NSString stringWithFormat:@"Quit %@", appName],
             @selector(terminate:), @"q");
   [topItem setSubmenu:submenu];
@@ -216,15 +255,19 @@ uintptr_t newWindow(int width, int height) {// {{{
     style |= NSMiniaturizableWindowMask;
     style |= NSClosableWindowMask;
 
+    NSSize winGrid = NSMakeSize(width, height);
+    NSSize minGrid = [nmux minGridSize];
     NSRect rect = [nmux lastWinFrame];
 
-    if (width != 0) {
-      rect.size.width = (CGFloat)width;
+    if (width == 0) {
+      winGrid.width = (int)minGrid.width;
     }
 
-    if (height != 0) {
-      rect.size.height = (CGFloat)height;
+    if (height == 0) {
+      winGrid.height = (int)minGrid.height;
     }
+
+    rect.size = NSSizeMultiply(winGrid, [nmux cellSize]);
 
     NSWindow *window = [[NSWindow alloc]
                         initWithContentRect:rect
@@ -248,6 +291,7 @@ uintptr_t newWindow(int width, int height) {// {{{
     [window setAcceptsMouseMovedEvents:YES];
 
     view = [[[NmuxScreen alloc] init] autorelease];
+    [view setGridSize:winGrid];
     [window setDelegate:view];
     [window setBackgroundColor:[NSColor blackColor]];
     [window setContentView:view];
@@ -260,32 +304,84 @@ uintptr_t newWindow(int width, int height) {// {{{
   return (uintptr_t)view;
 }// }}}
 
-void drawText(uintptr_t view, const char *text, int x, int y, uint8_t attrs,
+void setGridSize(uintptr_t view, int cols, int rows) {
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    [screen setGridSize:NSMakeSize(cols, rows)];
+  });
+}
+
+void drawText(uintptr_t view, const char *text, int index, uint8_t attrs,
               int32_t fg, int32_t bg, int32_t sp) {
-  TextAttr t;
-  t.attrs = attrs;
-  t.fg = fg;
-  t.bg = bg;
-  t.sp = sp;
-  [(NmuxScreen *)view addDrawOp:[DrawTextOp opWithText:text x:x y:y attrs:t]];
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    int x = index % (int)[screen grid].width;
+    int y = index / (int)[screen grid].width;
+    TextAttr t;
+
+    t.attrs = attrs;
+    t.fg = fg;
+    t.bg = bg;
+    t.sp = sp;
+    [screen addDrawOp:[DrawTextOp opWithText:text x:x y:y attrs:t]];
+  });
+}
+
+void drawRepeatedText(uintptr_t view, unichar character, int length, int index, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    int x = index % (int)[screen grid].width;
+    int y = index / (int)[screen grid].width;
+    TextAttr t;
+
+    t.attrs = attrs;
+    t.fg = fg;
+    t.bg = bg;
+    t.sp = sp;
+    [screen addDrawOp:[DrawRepeatedTextOp opWithCharacter:character length:length x:x y:y attrs:t]];
+  });
+}
+
+void scrollScreen(uintptr_t view, int delta, int top, int bottom, int left, int right, int32_t bg) {
+  DISPATCH_A(^{
+    [(NmuxScreen *)view addDrawOp:[ScrollOp opWithBg:bg delta:delta top:top
+                                              bottom:bottom left:left right:right]];
+  });
+}
+
+void clearScreen(uintptr_t view, int32_t bg) {
+  DISPATCH_A(^{
+    [(NmuxScreen *)view addDrawOp:[ClearOp opWithBg:bg]];
+  });
 }
 
 void flush(uintptr_t view) {
-  [(NmuxScreen *)view flushDrawOps];
+  DISPATCH_A(^{
+    [(NmuxScreen *)view flushDrawOps];
+  });
+}
+
+void getCellSize(int *x, int *y) {
+  NSSize cellSize = [nmux cellSize];
+  *x = (int)cellSize.width;
+  *y = (int)cellSize.height;
 }
 
 #ifndef NMUX_CGO
 void spam(NmuxScreen *view) {
-  uint32_t mx = (uint32_t)(NSWidth([view bounds]) / [nmux cellSize].width);
-  uint32_t my = (uint32_t)(NSHeight([view bounds]) / [nmux cellSize].height);
+  uint32_t mx = (uint32_t)([view grid].width);
+  uint32_t my = (uint32_t)([view grid].height);
 
 #define rand_color() (int32_t)arc4random_uniform(0xffffff)
 
+  uint32_t fg = rand_color();
+  uint32_t bg = rand_color();
+  drawRepeatedText((uintptr_t)view, (unichar)'A', 5, 0, 0, fg, bg, fg);
+  drawRepeatedText((uintptr_t)view, (unichar)'A', 5, 0, 0, fg, bg, fg);
   for (int i = 0; i < 1000; i++) {
     int x = arc4random_uniform(mx);
     int y = arc4random_uniform(my);
-    TextAttr t = {0, rand_color(), rand_color(), rand_color()};
-    drawText((uintptr_t)view, "Hello, World!", x, y, t);
+    drawText((uintptr_t)view, "Hello, World!", arc4random_uniform(x * y), 0, rand_color(), rand_color(), rand_color());
   }
   [view flushDrawOps];
 }
@@ -317,8 +413,6 @@ void spam(NmuxScreen *view) {
 
   cellSize.width = ceil([f maximumAdvancement].width);
   cellSize.height = ceil([f ascender] + ABS([f descender]));
-  minWinSize.width = cellSize.width * 80;
-  minWinSize.height = cellSize.height * 20;
 
   if (font != nil) {
     [font release];
@@ -342,8 +436,8 @@ void spam(NmuxScreen *view) {
   return cellSize;
 }
 
-+ (NSSize)minWinSize {
-  return minWinSize;
++ (NSSize)minGridSize {
+  return minGridSize;
 }
 
 + (void)setLastWinFrame:(NSRect)frame {
@@ -352,12 +446,18 @@ void spam(NmuxScreen *view) {
 
 + (NSRect)lastWinFrame {
   if (NSEqualRects(lastWinFrame, NSZeroRect)) {
-    lastWinFrame.size = minWinSize;
+    lastWinFrame.size = NSSizeMultiply(minGridSize, cellSize);
     NSRect screenRect = [[NSScreen mainScreen] visibleFrame];
     lastWinFrame.origin.x = 0;
     lastWinFrame.origin.y = NSHeight(screenRect) - NSHeight(lastWinFrame);
   }
   return lastWinFrame;
+}
+
++ (NSSize)fitGrid:(NSSize)size {
+  size.width -= fmod(size.width, cellSize.width);
+  size.height -= fmod(size.height, cellSize.height);
+  return size;
 }
 
 - (void)dealloc {
@@ -405,6 +505,102 @@ void spam(NmuxScreen *view) {
 @end
 
 
+#pragma mark - DrawRepeatedTextOp {{{1
+@implementation DrawRepeatedTextOp
++ (DrawRepeatedTextOp *)opWithCharacter:(unichar)c length:(int)length x:(int)x y:(int)y attrs:(TextAttr)attrs {
+  DrawRepeatedTextOp *op = [[DrawRepeatedTextOp alloc] init];
+  [op setCharacter:c];
+  [op setLength:length];
+  [op setAttrs:attrs];
+  [op setDirtyX:x y:y w:length h:1];
+  return [op autorelease];
+}
+
+
+// This is used for pattern fills in drawRect:
+static inline void drawTextPattern(void *info, CGContextRef ctx) {
+  TextPattern *tp = (TextPattern *)info;
+  NSColor *bg = RGB(tp->attrs.bg);
+  NSColor *fg = RGB(tp->attrs.fg);
+
+  CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+  CGContextFillRect(ctx, CGRectMake(0, 0, [nmux cellSize].width,
+                                    [nmux cellSize].height));
+
+  if (tp->c != ' ') {
+    CGGlyph glyphs;
+    CGPoint positions = CGPointMake(0, [nmux descent]);
+    unichar c = tp->c;
+    CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
+
+    CGFloat tx = ceilf([nmux firstCharPos]);
+    CGFloat ty = [nmux cellSize].height;
+    CGContextSetFillColorWithColor(ctx, [fg CGColor]);
+    CGContextSetTextDrawingMode(ctx, kCGTextFill);
+    CGContextTranslateCTM(ctx, tx, ty);
+    CGContextSetTextMatrix(ctx, CGAffineTransformMakeScale(1.0, -1.0));
+    CTFontDrawGlyphs((CTFontRef)[nmux font], &glyphs, &positions, 1, ctx);
+    CGContextTranslateCTM(ctx, -tx, -ty);
+    CGContextSetTextMatrix(ctx, CGAffineTransformIdentity);
+  }
+}
+
+
+static void patternReleaseCallback(void *info) {}
+
+
+static CGPatternRef getTextPatternLayer(TextPattern tp) {
+  TextPattern *p = firstPattern;
+  TextPattern *last = NULL;
+  TextAttr pt;
+
+  while(p != NULL) {
+    last = p;
+    pt = p->attrs;
+    if (p->c == tp.c && pt.attrs == tp.attrs.attrs && pt.bg == tp.attrs.bg && pt.fg == tp.attrs.fg && pt.sp == tp.attrs.sp) {
+      return p->pattern;
+    }
+    p = p->next;
+  }
+
+  TextPattern *np = calloc(1, sizeof(TextPattern));
+  memcpy(np, &tp, sizeof(TextPattern));
+  np->pattern = NULL;
+  np->next = NULL;
+
+  if (last != NULL) {
+    last->next = np;
+  } else {
+    firstPattern = np;
+  }
+
+  CGPatternCallbacks cb;
+  cb.drawPattern = &drawTextPattern;
+  cb.releaseInfo = &patternReleaseCallback;
+  cb.version = 0;
+
+  CGRect bounds = CGRectZero;
+  bounds.size = [nmux cellSize];
+  np->pattern = CGPatternCreate((void *)np, bounds, CGAffineTransformIdentity, bounds.size.width, bounds.size.height, kCGPatternTilingConstantSpacing, YES, &cb);
+  return np->pattern;
+}
+
+static void textPatternClear() {
+  TextPattern *p = firstPattern;
+  TextPattern *n = NULL;
+
+  while(p != NULL) {
+    n = p->next;
+    p->next = NULL;
+    CGPatternRelease(p->pattern);
+    free(p);
+    p = n;
+  }
+
+  firstPattern = NULL;
+}
+
+@end
 #pragma mark - ClearOp {{{1
 @implementation ClearOp
 + (ClearOp *)opWithBg:(int32_t)bg {
@@ -425,7 +621,7 @@ void spam(NmuxScreen *view) {
   ScrollOp *op = [[ScrollOp alloc] init];
   [op setAttrs:(TextAttr){0, 0, bg, 0}];
   [op setDelta:delta];
-  [op setDirtyX:left y:top w:right-left h:bottom-top];
+  [op setDirtyX:left y:top w:(right-left)+1 h:(bottom-top)+1];
   return [op autorelease];
 }
 
@@ -446,7 +642,7 @@ void spam(NmuxScreen *view) {
 @end
 
 
-#pragma mark - NmuxSurface {{{1
+#pragma mark - NmuxScreen {{{1
 @implementation NmuxScreen
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
@@ -482,7 +678,18 @@ void spam(NmuxScreen *view) {
 }
 
 #pragma mark - NSResponder {{{2
-- (void)keyDown:(NSEvent *)event {// {{{
+- (void)setGridSize:(NSSize)size {
+  _grid = size;
+  NSSize frameSize = NSSizeMultiply(size, [nmux cellSize]);
+  NSRect winFrame = [[self window] frameRectForContentRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
+  winFrame.origin = [[self window] frame].origin;
+  [[self window] setDelegate:nil];
+  [[self window] setFrame:winFrame display:YES];
+  [[self window] setDelegate:self];
+}
+
+// Key Handling {{{
+- (void)keyDown:(NSEvent *)event {
   // We only care about the keyDown event.
   BOOL shift = ([event modifierFlags] & NSShiftKeyMask) == NSShiftKeyMask;
   BOOL ctrl = ([event modifierFlags] & NSControlKeyMask) == NSControlKeyMask;
@@ -735,7 +942,7 @@ void spam(NmuxScreen *view) {
   }
 
   inputEvent((uintptr_t)self, (char *)[key UTF8String]);
-}// }}}
+}
 
 - (BOOL)performKeyEquivalent:(NSEvent *)event {
   // Allows certain key combinations to be interpreted
@@ -754,7 +961,9 @@ void spam(NmuxScreen *view) {
   [self keyDown:event];
   return YES;
 }
+// }}}
 
+// Mouse Handling {{{
 - (NSPoint)mouseCoords {
   NSPoint coords = [[self window] mouseLocationOutsideOfEventStream];
   NSSize cellSize = [nmux cellSize];
@@ -831,11 +1040,11 @@ void spam(NmuxScreen *view) {
 
 - (void)scrollWheel:(NSEvent *)event {
   if ([event deltaY] < 0) {
-    [self dispatchMouseEvent:@"ScrollWheelUp"];
-  } else {
     [self dispatchMouseEvent:@"ScrollWheelDown"];
+  } else {
+    [self dispatchMouseEvent:@"ScrollWheelUp"];
   }
-}
+}// }}}
 
 #pragma mark - Nmux Drawing {{{2
 - (void)addDrawOp:(id)op {
@@ -873,10 +1082,8 @@ void spam(NmuxScreen *view) {
       CGSize screenSize = CGLayerGetSize(screenLayer);
       CGSize winSize = (CGSize)[self bounds].size;
       if (screenSize.width < winSize.width || screenSize.height < winSize.height) {
+        CGContextDrawLayerAtPoint(ctx, CGPointZero, screenLayer);
         CGLayerRef newLayer = CGLayerCreateWithContext(ctx, winSize, NULL);
-        CGContextRef layerCtx = CGLayerGetContext(newLayer);
-        CGContextDrawLayerAtPoint(layerCtx, CGPointZero, screenLayer);
-        CGLayerRelease(screenLayer);
         screenLayer = newLayer;
       }
     }
@@ -885,25 +1092,70 @@ void spam(NmuxScreen *view) {
       CGContextRef layerCtx = CGLayerGetContext(screenLayer);
       // A this point, drawOps should contain everything that matches the rects
       // obtained from getRectsBeingDrawn:count.
-      CGContextSaveGState(layerCtx);
 
       for (DrawOp *op in drawOps) {
+        CGContextSaveGState(layerCtx);
         CGFloat tx = NSMinX([op dirtyRect]);
         CGFloat ty = NSMinY([op dirtyRect]);
-
-        CGContextTranslateCTM(layerCtx, tx, ty);
         NSColor *bg = RGB([op attrs].bg);
 
+        if ([op isKindOfClass:[ScrollOp class]]) {
+          NSLog(@"Scroll");
+          ScrollOp *o = (ScrollOp *)op;
+
+          CGFloat offset = [o delta] * [nmux cellSize].height;
+          CGRect clip = (CGRect)[op dirtyRect];
+          clip.origin.y += offset;
+          clip.size.height -= ABS(offset);
+
+          CGContextSaveGState(layerCtx);
+
+          CGContextClipToRect(layerCtx, [op dirtyRect]);
+          CGContextTranslateCTM(layerCtx, 0, -offset);
+          CGContextDrawLayerAtPoint(layerCtx, CGPointZero, screenLayer);
+          CGContextTranslateCTM(layerCtx, 0, offset);
+
+          if (offset > 0) {
+            clip.origin.y = [op dirtyRect].origin.y + clip.size.height;
+          } else {
+            clip.origin.y = [op dirtyRect].origin.y;
+          }
+
+          clip.size.height = fabs(offset);
+          CGContextSetFillColorWithColor(layerCtx, [bg CGColor]);
+          CGContextFillRect(layerCtx, clip);
+
+
+          CGContextRestoreGState(layerCtx);
+          continue;
+        } else if ([op isKindOfClass:[DrawRepeatedTextOp class]]) {
+          DrawRepeatedTextOp *o = (DrawRepeatedTextOp *)op;
+          TextPattern tp;
+          tp.c = [o character];
+          tp.attrs = [o attrs];
+          CGPatternRef pattern = getTextPatternLayer(tp);
+          CGFloat a = 1.0;
+
+          CGContextSaveGState(layerCtx);
+          CGColorSpaceRef ps = CGColorSpaceCreatePattern(NULL);
+          CGContextSetFillColorSpace(layerCtx, ps);
+          CGContextSetFillPattern(layerCtx, pattern, &a);
+          CGContextFillRect(layerCtx, [op dirtyRect]);
+          CGColorSpaceRelease(ps);
+          CGContextRestoreGState(layerCtx);
+          continue;
+        }
+
+        CGContextTranslateCTM(layerCtx, tx, ty);
+        CGRect rect = CGRectMake(0, 0, NSWidth([op dirtyRect]), NSHeight([op dirtyRect]));
         CGContextSetFillColorWithColor(layerCtx, [bg CGColor]);
-        CGContextFillRect(layerCtx, CGRectMake(0, 0, NSWidth([op dirtyRect]), NSHeight([op dirtyRect])));
+        CGContextFillRect(layerCtx, rect);
 
         if ([op isKindOfClass:[ClearOp class]]) {
-
-        } else if ([op isKindOfClass:[ScrollOp class]]) {
-
+          textPatternClear();
         } else if ([op isKindOfClass:[DrawTextOp class]]) {
           DrawTextOp *o = (DrawTextOp *)op;
-          NSUInteger runLength = [[o text] length];
+          size_t runLength = [[o text] length];
 
           NSColor *fg = RGB([op attrs].fg);
 
@@ -920,7 +1172,7 @@ void spam(NmuxScreen *view) {
             runPositions = calloc(runMaxLength, sizeof(CGPoint));
           }
 
-          [[o text] getCharacters:runChars];
+          [[o text] getCharacters:runChars range:NSMakeRange(0, runLength)];
           NSSize cellSize = [nmux cellSize];
           CGFloat descent = [nmux descent];
 
@@ -944,9 +1196,9 @@ void spam(NmuxScreen *view) {
         }
 
         CGContextTranslateCTM(layerCtx, -tx, -ty);
+        CGContextRestoreGState(layerCtx);
       }
 
-      CGContextRestoreGState(layerCtx);
       [drawOps removeAllObjects];
     }
 
@@ -958,29 +1210,36 @@ void spam(NmuxScreen *view) {
 
 #pragma mark - Window Delegate {{{2
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize {
-  NSSize minWinSize = [nmux minWinSize];
-  NSSize cellSize = [nmux cellSize];
   NSRect contentFrame = [sender contentRectForFrameRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
-  frameSize.width = MAX(minWinSize.width,
-                        NSWidth(contentFrame) - fmod(NSWidth(contentFrame),
-                                               cellSize.width));
-  CGFloat titleBar = frameSize.height - NSHeight(contentFrame);
-  frameSize.height = titleBar + MAX(minWinSize.height,
-                         NSHeight(contentFrame) - fmod(NSHeight(contentFrame),
-                                                 cellSize.height));
-  return frameSize;
+  NSSize minSize = NSSizeMultiply([nmux minGridSize], [nmux cellSize]);
+  NSSize newSize = [nmux fitGrid:contentFrame.size];
+
+  if (newSize.width < minSize.width) {
+    newSize.width = minSize.width;
+  }
+
+  if (newSize.height < minSize.height) {
+    newSize.height = minSize.height;
+  }
+
+  newSize.height += frameSize.height - NSHeight(contentFrame);
+  return newSize;
 }
 
 - (void)windowDidMove:(NSNotification *)notification {
   NSRect frame = [[self window] frame];
   [nmux setLastWinFrame:frame];
-  winMoved((uintptr_t)self, (NSInteger)NSMinX(frame), (NSInteger)NSMinY(frame),
-              (NSInteger)NSWidth(frame), (NSInteger)NSHeight(frame));
+  winMoved((uintptr_t)self, (int)NSMinX(frame), (int)NSMinY(frame));
 }
 
 - (void)windowDidResize:(NSNotification *)notification {
-  [self windowDidMove:notification];
+  NSRect frame = [self bounds];
+  [nmux setLastWinFrame:frame];
+  NSSize newGrid = NSSizeDivide(frame.size, [nmux cellSize]);
+  winResized((uintptr_t)self, (int)NSWidth(frame), (int)NSHeight(frame),
+             (int)newGrid.width, (int)newGrid.height);
 #ifndef NMUX_CGO
+  [self setGridSize:NSSizeDivide([self bounds].size, [nmux cellSize])];
   spam(self);
 #endif
 }
@@ -1007,8 +1266,8 @@ void spam(NmuxScreen *view) {
 #pragma mark - AppDelegate {{{1
 @implementation AppDelegate // {{{2
 
-- (void)newWindow:(id)action {
-  newWindow(0, 0);
+- (void)applicationMenuSelected:(NSMenuItem *)menu {
+  appMenuSelected((char *)[[menu title] UTF8String]);
 }
 
 - (void)applicationWillUpdate:(NSNotification *)notification {

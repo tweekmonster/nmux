@@ -4,22 +4,26 @@ package gui
 #cgo CFLAGS: -x objective-c -mmacosx-version-min=10.8 -D__MAC_OS_X_VERSION_MAX_ALLOWED=1080 -D NMUX_CGO
 #cgo LDFLAGS: -framework Cocoa -framework AppKit
 
-#include <stdint.h>
+#import <Cocoa/Cocoa.h>
 
 void startApp();
 void stopApp();
 uintptr_t newWindow(int, int);
 void setGridSize(uintptr_t, int, int);
-void drawText(uintptr_t, const char *, int, int, uint8_t, int32_t, int32_t, int32_t);
+void drawText(uintptr_t, const char *, int, uint8_t, int32_t, int32_t, int32_t);
+void drawRepeatedText(uintptr_t, unichar, int, int, uint8_t, int32_t, int32_t, int32_t);
+void clearScreen(uintptr_t, int32_t);
+void scrollScreen(uintptr_t, int, int, int, int, int, int32_t);
 void flush(uintptr_t);
+void getCellSize(int*, int*);
 */
 import "C"
 import (
 	"runtime"
 	"sync"
+	"unsafe"
 
 	"github.com/tweekmonster/nmux/screen"
-	"github.com/tweekmonster/nmux/util"
 )
 
 func init() {
@@ -39,21 +43,42 @@ func (w *window) GetID() uintptr {
 	return w.id
 }
 
-func (w *window) PutChar(c rune, attrs screen.CellAttrs) error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
+func (w *window) SetGrid(cols, rows int) error {
+	C.setGridSize(C.uintptr_t(w.id), C.int(cols), C.int(rows))
 	return nil
 }
 
-func (w *window) PutString(s string, attrs screen.CellAttrs) error {
+func (w *window) PutString(s string, index int, attrs screen.CellAttrs) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+
+	sbytes := []byte(s)
+	C.drawText(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&sbytes[0])), C.int(index), C.uint8_t(attrs.Attrs), C.int32_t(attrs.Fg), C.int32_t(attrs.Bg), C.int32_t(attrs.Sp))
+
 	return nil
 }
 
-func (w *window) Scroll() error {
+func (w *window) PutRepeatedString(r rune, length, index int, attrs screen.CellAttrs) error {
+	C.drawRepeatedText(C.uintptr_t(w.id), C.unichar(r), C.int(length), C.int(index), C.uint8_t(attrs.Attrs), C.int32_t(attrs.Fg), C.int32_t(attrs.Bg), C.int32_t(attrs.Sp))
+	return nil
+}
+
+func (w *window) Scroll(delta, top, bottom, left, right int, bg screen.Color) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
+	C.scrollScreen(C.uintptr_t(w.id), C.int(delta), C.int(top), C.int(bottom), C.int(left), C.int(right), C.int32_t(bg))
+	return nil
+}
+
+func (w *window) Clear(bg screen.Color) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	C.clearScreen(C.uintptr_t(w.id), C.int32_t(bg))
+	return nil
+}
+
+func (w *window) Flush(character string, cursor screen.Vector2, attrs screen.CellAttrs) error {
+	C.flush(C.uintptr_t(w.id))
 	return nil
 }
 
@@ -69,6 +94,10 @@ func (w *window) SendEvent(event interface{}) {
 
 func (w *window) NextEvent() interface{} {
 	return <-w.events
+}
+
+func (w *window) EventChannel() <-chan interface{} {
+	return w.events
 }
 
 func platformStart(callback func()) error {
@@ -89,6 +118,12 @@ func platformNewWindow(width, height int) Window {
 	return win
 }
 
+func platformCellSize() screen.Vector2 {
+	var x, y int
+	C.getCellSize((*C.int)(unsafe.Pointer(&x)), (*C.int)(unsafe.Pointer(&y)))
+	return screen.Vector2{X: x, Y: y}
+}
+
 //export appStarted
 func appStarted() {
 	go appCallback()
@@ -96,41 +131,58 @@ func appStarted() {
 
 //export appStopped
 func appStopped() {
+	sendApplicationEvent(StateEvent("stopped"))
 }
 
 //export appHidden
 func appHidden() {
+	sendApplicationEvent(StateEvent("hidden"))
 }
 
 //export inputEvent
 func inputEvent(id uintptr, key *C.char) {
-	util.Debug("Key:", C.GoString(key))
-	sendEvent(id, InputEvent(C.GoString(key)))
-	C.drawText(C.uintptr_t(id), key, 1, 1, 0, 0xffffff, 0x00ff00, 0x000000)
-	C.flush(C.uintptr_t(id))
+	sendWindowEvent(id, InputEvent(C.GoString(key)))
 }
 
 //export winMoved
-func winMoved(id uintptr, x, y, w, h int) {
-	sendEvent(id, ResizeEvent{
-		X:      x,
-		Y:      y,
-		Width:  w,
-		Height: h,
+func winMoved(id uintptr, x, y int) {
+	sendWindowEvent(id, MoveEvent{
+		X: x,
+		Y: y,
+	})
+}
+
+//export winResized
+func winResized(id uintptr, w, h, gw, gh int) {
+	sendWindowEvent(id, ResizeEvent{
+		Width:      w,
+		Height:     h,
+		GridWidth:  gw,
+		GridHeight: gh,
 	})
 }
 
 //export winClosed
 func winClosed(id uintptr) {
-	sendEvent(id, StateEvent("closed"))
+	sendWindowEvent(id, StateEvent("closed"))
 }
 
 //export winFocused
 func winFocused(id uintptr) {
-	sendEvent(id, StateEvent("focused"))
+	sendWindowEvent(id, StateEvent("focused"))
 }
 
 //export winFocusLost
 func winFocusLost(id uintptr) {
-	sendEvent(id, StateEvent("lostFocus"))
+	sendWindowEvent(id, StateEvent("lostFocus"))
+}
+
+//export appMenuSelected
+func appMenuSelected(title *C.char) {
+	sendApplicationEvent(MenuEvent(C.GoString(title)))
+}
+
+//export windowMenuSelected
+func windowMenuSelected(id uintptr, title *C.char) {
+	sendWindowEvent(id, MenuEvent(C.GoString(title)))
 }
