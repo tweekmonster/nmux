@@ -99,8 +99,6 @@ func (c *Client) Resize(w, h int) {
 }
 
 func (c *Client) parseOps(r *StreamReader) {
-	// ts := GetTypeSetter()
-	// tsize := ts.CellSize()
 	win := app.GetWindow(0)
 
 	if win == nil {
@@ -177,7 +175,6 @@ func (c *Client) parseOps(r *StreamReader) {
 			left := r.ReadEint32()
 			right := r.ReadEint32()
 
-			// util.Print("Scroll. Bg:", bg, "delta:", delta, "top:", top, "bottom:", bottom, "left:", left, "right:", right)
 			win.Scroll(int(delta), top, bottom, left, right, screen.Color(bg))
 
 		case screen.OpClear:

@@ -10,7 +10,7 @@ void startApp();
 void stopApp();
 uintptr_t newWindow(int, int);
 void setGridSize(uintptr_t, int, int);
-void drawText(uintptr_t, const char *, int, uint8_t, int32_t, int32_t, int32_t);
+void drawText(uintptr_t, const char *, int, int, uint8_t, int32_t, int32_t, int32_t);
 void drawRepeatedText(uintptr_t, unichar, int, int, uint8_t, int32_t, int32_t, int32_t);
 void clearScreen(uintptr_t, int32_t);
 void scrollScreen(uintptr_t, int, int, int, int, int, int32_t);
@@ -53,7 +53,7 @@ func (w *window) PutString(s string, index int, attrs screen.CellAttrs) error {
 	defer w.mu.Unlock()
 
 	sbytes := []byte(s)
-	C.drawText(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&sbytes[0])), C.int(index), C.uint8_t(attrs.Attrs), C.int32_t(attrs.Fg), C.int32_t(attrs.Bg), C.int32_t(attrs.Sp))
+	C.drawText(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&sbytes[0])), C.int(len(sbytes)), C.int(index), C.uint8_t(attrs.Attrs), C.int32_t(attrs.Fg), C.int32_t(attrs.Bg), C.int32_t(attrs.Sp))
 
 	return nil
 }

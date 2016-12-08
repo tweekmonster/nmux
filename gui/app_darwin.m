@@ -305,15 +305,15 @@ uintptr_t newWindow(int width, int height) {// {{{
 }// }}}
 
 void setGridSize(uintptr_t view, int cols, int rows) {
-  DISPATCH_A(^{
+  // DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     [screen setGridSize:NSMakeSize(cols, rows)];
-  });
+  // });
 }
 
-void drawText(uintptr_t view, const char *text, int index, uint8_t attrs,
-              int32_t fg, int32_t bg, int32_t sp) {
-  DISPATCH_A(^{
+void drawText(uintptr_t view, const char *text, int length, int index,
+              uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
+  // DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     int x = index % (int)[screen grid].width;
     int y = index / (int)[screen grid].width;
@@ -323,12 +323,18 @@ void drawText(uintptr_t view, const char *text, int index, uint8_t attrs,
     t.fg = fg;
     t.bg = bg;
     t.sp = sp;
-    [screen addDrawOp:[DrawTextOp opWithText:text x:x y:y attrs:t]];
-  });
+
+    char *str = calloc(length + 1, sizeof(char));
+    strncpy(str, text, length);
+    str[length] = '\0';
+
+    [screen addDrawOp:[DrawTextOp opWithText:str x:x y:y attrs:t]];
+    free(str);
+  // });
 }
 
 void drawRepeatedText(uintptr_t view, unichar character, int length, int index, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
-  DISPATCH_A(^{
+  // DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     int x = index % (int)[screen grid].width;
     int y = index / (int)[screen grid].width;
@@ -339,26 +345,26 @@ void drawRepeatedText(uintptr_t view, unichar character, int length, int index, 
     t.bg = bg;
     t.sp = sp;
     [screen addDrawOp:[DrawRepeatedTextOp opWithCharacter:character length:length x:x y:y attrs:t]];
-  });
+  // });
 }
 
 void scrollScreen(uintptr_t view, int delta, int top, int bottom, int left, int right, int32_t bg) {
-  DISPATCH_A(^{
+  // DISPATCH_A(^{
     [(NmuxScreen *)view addDrawOp:[ScrollOp opWithBg:bg delta:delta top:top
                                               bottom:bottom left:left right:right]];
-  });
+  // });
 }
 
 void clearScreen(uintptr_t view, int32_t bg) {
-  DISPATCH_A(^{
+  // DISPATCH_A(^{
     [(NmuxScreen *)view addDrawOp:[ClearOp opWithBg:bg]];
-  });
+  // });
 }
 
 void flush(uintptr_t view) {
-  DISPATCH_A(^{
+  // DISPATCH_A(^{
     [(NmuxScreen *)view flushDrawOps];
-  });
+  // });
 }
 
 void getCellSize(int *x, int *y) {
@@ -411,7 +417,7 @@ void spam(NmuxScreen *view) {
                    size:size];
   }
 
-  cellSize.width = ceil([f maximumAdvancement].width);
+  cellSize.width = ceil([f maximumAdvancement].width) + 1;
   cellSize.height = ceil([f ascender] + ABS([f descender]));
 
   if (font != nil) {
@@ -523,9 +529,9 @@ static inline void drawTextPattern(void *info, CGContextRef ctx) {
   NSColor *bg = RGB(tp->attrs.bg);
   NSColor *fg = RGB(tp->attrs.fg);
 
+  CGRect bounds = CGRectMake(0, 0, [nmux cellSize].width, [nmux cellSize].height);
   CGContextSetFillColorWithColor(ctx, [bg CGColor]);
-  CGContextFillRect(ctx, CGRectMake(0, 0, [nmux cellSize].width,
-                                    [nmux cellSize].height));
+  CGContextFillRect(ctx, bounds);
 
   if (tp->c != ' ') {
     CGGlyph glyphs;
@@ -533,15 +539,9 @@ static inline void drawTextPattern(void *info, CGContextRef ctx) {
     unichar c = tp->c;
     CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
 
-    CGFloat tx = ceilf([nmux firstCharPos]);
-    CGFloat ty = [nmux cellSize].height;
     CGContextSetFillColorWithColor(ctx, [fg CGColor]);
     CGContextSetTextDrawingMode(ctx, kCGTextFill);
-    CGContextTranslateCTM(ctx, tx, ty);
-    CGContextSetTextMatrix(ctx, CGAffineTransformMakeScale(1.0, -1.0));
     CTFontDrawGlyphs((CTFontRef)[nmux font], &glyphs, &positions, 1, ctx);
-    CGContextTranslateCTM(ctx, -tx, -ty);
-    CGContextSetTextMatrix(ctx, CGAffineTransformIdentity);
   }
 }
 
@@ -674,7 +674,7 @@ static void textPatternClear() {
 }
 
 - (BOOL)isFlipped {
-  return YES;
+  return NO;
 }
 
 #pragma mark - NSResponder {{{2
@@ -1056,21 +1056,111 @@ static void textPatternClear() {
 - (void)flushDrawOps {
   @synchronized(pendingDrawOps) {
     @synchronized(drawOps) {
-      NSRect frame = [self frame];
-
       for (DrawOp *op in pendingDrawOps) {
         [drawOps addObject:op];
         if ([op isKindOfClass:[ClearOp class]]) {
-          [op setDirtyX:NSMinX(frame) y:NSMinY(frame)
-                      w:NSWidth(frame) h:NSHeight(frame)];
-          [self setNeedsDisplay:YES];
-        } else {
-          [self setNeedsDisplayInRect:[op dirtyRect]];
+          [op setDirtyX:0 y:0 w:_grid.width h:_grid.height];
         }
+
+        CGAffineTransform transform = CGAffineTransformMakeScale(1, -1);
+        transform = CGAffineTransformTranslate(transform, 0, -NSHeight([self bounds]));
+        CGRect rect = CGRectApplyAffineTransform([self bounds], transform);
+        [self setNeedsDisplayInRect:rect];
       }
       [pendingDrawOps removeAllObjects];
     }
   }
+}
+
+- (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {
+  NSColor *bg = RGB([op attrs].bg);
+  NSColor *fg = RGB([op attrs].fg);
+
+  CGContextSaveGState(ctx);
+  CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+  CGContextFillRect(ctx, rect);
+
+  size_t runLength = (size_t)[[op text] length];
+
+  if (runLength > runMaxLength) {
+    if (runMaxLength > 0) {
+      free(runChars);
+      free(runGlyphs);
+      free(runPositions);
+    }
+
+    runMaxLength = runLength;
+    runChars = calloc(runMaxLength, sizeof(unichar));
+    runGlyphs = calloc(runMaxLength, sizeof(CGGlyph));
+    runPositions = calloc(runMaxLength, sizeof(CGPoint));
+  }
+
+  [[op text] getCharacters:runChars range:NSMakeRange(0, runLength)];
+  NSSize cellSize = [nmux cellSize];
+  CGFloat descent = [nmux descent];
+
+  CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], runChars,
+                               runGlyphs, runLength);
+
+  for (int i = 0; i < runLength; i++) {
+    runPositions[i] = CGPointMake(i * cellSize.width, 0);
+  }
+
+  CGContextSetFillColorWithColor(ctx, [fg CGColor]);
+  CGContextSetTextDrawingMode(ctx, kCGTextFill);
+
+  CGPoint o = rect.origin;
+  o.x += ceilf([nmux firstCharPos]);
+  o.y += ceilf(descent);
+  CGContextTranslateCTM(ctx, o.x, o.y);
+  CTFontDrawGlyphs((CTFontRef)[nmux font], runGlyphs, runPositions, runLength, ctx);
+  CGContextTranslateCTM(ctx, -o.x, -o.y);
+  CGContextRestoreGState(ctx);
+}
+
+- (void)drawTextPatternInContext:(CGContextRef)ctx op:(DrawRepeatedTextOp *)op rect:(CGRect)rect {
+  TextPattern tp;
+  tp.c = [op character];
+  tp.attrs = [op attrs];
+  CGPatternRef pattern = getTextPatternLayer(tp);
+  CGFloat a = 1.0;
+
+  CGContextSaveGState(ctx);
+  CGColorSpaceRef ps = CGColorSpaceCreatePattern(NULL);
+  CGContextSetFillColorSpace(ctx, ps);
+  CGContextSetFillPattern(ctx, pattern, &a);
+  // CGContextSetFillColorWithColor(ctx, [[NSColor whiteColor] CGColor]);
+  CGContextFillRect(ctx, rect);
+  CGColorSpaceRelease(ps);
+  CGContextRestoreGState(ctx);
+}
+
+- (void)scrollInContext:(CGContextRef)ctx op:(ScrollOp *)op rect:(CGRect)rect {
+  CGFloat offset = [op delta] * [nmux cellSize].height;
+  CGRect clip = rect;
+  clip.origin.y += offset;
+  clip.size.height -= ABS(offset);
+
+  CGContextSaveGState(ctx);
+  CGContextSetShouldAntialias(ctx, NO);
+
+  CGContextClipToRect(ctx, rect);
+  CGContextTranslateCTM(ctx, 0, offset);
+  CGContextDrawLayerAtPoint(ctx, CGPointZero, screenLayer);
+  CGContextTranslateCTM(ctx, 0, -offset);
+
+  if (offset < 0) {
+    clip.origin.y = rect.origin.y + clip.size.height;
+  } else {
+    clip.origin.y = rect.origin.y;
+  }
+
+  NSColor *bg = RGB([op attrs].bg);
+  clip.size.height = fabs(offset);
+  CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+  CGContextFillRect(ctx, clip);
+
+  CGContextRestoreGState(ctx);
 }
 
 - (void)drawRect:(NSRect)dirtyRect {
@@ -1088,6 +1178,9 @@ static void textPatternClear() {
       }
     }
 
+    CGAffineTransform transform = CGAffineTransformMakeScale(1, -1);
+    transform = CGAffineTransformTranslate(transform, 0, -NSHeight([self bounds]));
+
     if ([drawOps count] != 0) {
       CGContextRef layerCtx = CGLayerGetContext(screenLayer);
       // A this point, drawOps should contain everything that matches the rects
@@ -1095,113 +1188,29 @@ static void textPatternClear() {
 
       for (DrawOp *op in drawOps) {
         CGContextSaveGState(layerCtx);
-        CGFloat tx = NSMinX([op dirtyRect]);
-        CGFloat ty = NSMinY([op dirtyRect]);
-        NSColor *bg = RGB([op attrs].bg);
-
-        if ([op isKindOfClass:[ScrollOp class]]) {
-          NSLog(@"Scroll");
-          ScrollOp *o = (ScrollOp *)op;
-
-          CGFloat offset = [o delta] * [nmux cellSize].height;
-          CGRect clip = (CGRect)[op dirtyRect];
-          clip.origin.y += offset;
-          clip.size.height -= ABS(offset);
-
-          CGContextSaveGState(layerCtx);
-
-          CGContextClipToRect(layerCtx, [op dirtyRect]);
-          CGContextTranslateCTM(layerCtx, 0, -offset);
-          CGContextDrawLayerAtPoint(layerCtx, CGPointZero, screenLayer);
-          CGContextTranslateCTM(layerCtx, 0, offset);
-
-          if (offset > 0) {
-            clip.origin.y = [op dirtyRect].origin.y + clip.size.height;
-          } else {
-            clip.origin.y = [op dirtyRect].origin.y;
-          }
-
-          clip.size.height = fabs(offset);
-          CGContextSetFillColorWithColor(layerCtx, [bg CGColor]);
-          CGContextFillRect(layerCtx, clip);
-
-
-          CGContextRestoreGState(layerCtx);
-          continue;
-        } else if ([op isKindOfClass:[DrawRepeatedTextOp class]]) {
-          DrawRepeatedTextOp *o = (DrawRepeatedTextOp *)op;
-          TextPattern tp;
-          tp.c = [o character];
-          tp.attrs = [o attrs];
-          CGPatternRef pattern = getTextPatternLayer(tp);
-          CGFloat a = 1.0;
-
-          CGContextSaveGState(layerCtx);
-          CGColorSpaceRef ps = CGColorSpaceCreatePattern(NULL);
-          CGContextSetFillColorSpace(layerCtx, ps);
-          CGContextSetFillPattern(layerCtx, pattern, &a);
-          CGContextFillRect(layerCtx, [op dirtyRect]);
-          CGColorSpaceRelease(ps);
-          CGContextRestoreGState(layerCtx);
-          continue;
-        }
-
-        CGContextTranslateCTM(layerCtx, tx, ty);
-        CGRect rect = CGRectMake(0, 0, NSWidth([op dirtyRect]), NSHeight([op dirtyRect]));
-        CGContextSetFillColorWithColor(layerCtx, [bg CGColor]);
-        CGContextFillRect(layerCtx, rect);
+        CGContextSetBlendMode(layerCtx, kCGBlendModeNormal);
+        CGRect rect = CGRectApplyAffineTransform([op dirtyRect], transform);
 
         if ([op isKindOfClass:[ClearOp class]]) {
-          textPatternClear();
+          NSColor *bg = RGB([op attrs].bg);
+          CGContextSetFillColorWithColor(layerCtx, [bg CGColor]);
+          CGContextFillRect(layerCtx, rect);
+          NSLog(@"Clear %@", NSStringFromRect(rect));
         } else if ([op isKindOfClass:[DrawTextOp class]]) {
-          DrawTextOp *o = (DrawTextOp *)op;
-          size_t runLength = [[o text] length];
-
-          NSColor *fg = RGB([op attrs].fg);
-
-          if (runLength > runMaxLength) {
-            if (runMaxLength > 0) {
-              free(runChars);
-              free(runGlyphs);
-              free(runPositions);
-            }
-
-            runMaxLength = runLength;
-            runChars = calloc(runMaxLength, sizeof(unichar));
-            runGlyphs = calloc(runMaxLength, sizeof(CGGlyph));
-            runPositions = calloc(runMaxLength, sizeof(CGPoint));
-          }
-
-          [[o text] getCharacters:runChars range:NSMakeRange(0, runLength)];
-          NSSize cellSize = [nmux cellSize];
-          CGFloat descent = [nmux descent];
-
-          CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], runChars,
-                                       runGlyphs, runLength);
-
-          for (int i = 0; i < runLength; i++) {
-            runPositions[i] = CGPointMake(i * cellSize.width, descent);
-          }
-
-          CGContextSetFillColorWithColor(layerCtx, [fg CGColor]);
-          CGContextSetTextDrawingMode(layerCtx, kCGTextFill);
-
-          CGContextSetTextMatrix(layerCtx, CGAffineTransformMakeScale(1.0, -1.0));
-          CGFloat p = ceilf([nmux firstCharPos]);
-          CGContextTranslateCTM(layerCtx, p, cellSize.height);
-
-          CTFontDrawGlyphs((CTFontRef)[nmux font], runGlyphs, runPositions, runLength, layerCtx);
-          CGContextTranslateCTM(layerCtx, -p, -cellSize.height);
-          CGContextSetTextMatrix(layerCtx, CGAffineTransformIdentity);
+          [self drawTextContext:layerCtx op:(DrawTextOp *)op rect:rect];
+        } else if ([op isKindOfClass:[DrawRepeatedTextOp class]]) {
+          [self drawTextPatternInContext:layerCtx op:(DrawRepeatedTextOp *)op rect:rect];
+        } else if ([op isKindOfClass:[ScrollOp class]]) {
+          [self scrollInContext:layerCtx op:(ScrollOp *)op rect:rect];
         }
 
-        CGContextTranslateCTM(layerCtx, -tx, -ty);
         CGContextRestoreGState(layerCtx);
       }
 
       [drawOps removeAllObjects];
     }
 
+    CGContextSetBlendMode(ctx, kCGBlendModeNormal);
     CGContextDrawLayerAtPoint(ctx, CGPointZero, screenLayer);
   }
 
