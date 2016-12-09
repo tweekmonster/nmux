@@ -44,6 +44,8 @@ func (w *window) GetID() uintptr {
 }
 
 func (w *window) SetGrid(cols, rows int) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	C.setGridSize(C.uintptr_t(w.id), C.int(cols), C.int(rows))
 	return nil
 }
@@ -53,13 +55,25 @@ func (w *window) PutString(s string, index int, attrs screen.CellAttrs) error {
 	defer w.mu.Unlock()
 
 	sbytes := []byte(s)
-	C.drawText(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&sbytes[0])), C.int(len(sbytes)), C.int(index), C.uint8_t(attrs.Attrs), C.int32_t(attrs.Fg), C.int32_t(attrs.Bg), C.int32_t(attrs.Sp))
+	fg := C.int32_t(attrs.Fg)
+	bg := C.int32_t(attrs.Bg)
+	if attrs.Attrs&screen.AttrReverse != 0 {
+		fg, bg = bg, fg
+	}
+	C.drawText(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&sbytes[0])), C.int(len(sbytes)), C.int(index), C.uint8_t(attrs.Attrs), fg, bg, C.int32_t(attrs.Sp))
 
 	return nil
 }
 
 func (w *window) PutRepeatedString(r rune, length, index int, attrs screen.CellAttrs) error {
-	C.drawRepeatedText(C.uintptr_t(w.id), C.unichar(r), C.int(length), C.int(index), C.uint8_t(attrs.Attrs), C.int32_t(attrs.Fg), C.int32_t(attrs.Bg), C.int32_t(attrs.Sp))
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	fg := C.int32_t(attrs.Fg)
+	bg := C.int32_t(attrs.Bg)
+	if attrs.Attrs&screen.AttrReverse != 0 {
+		fg, bg = bg, fg
+	}
+	C.drawRepeatedText(C.uintptr_t(w.id), C.unichar(r), C.int(length), C.int(index), C.uint8_t(attrs.Attrs), fg, bg, C.int32_t(attrs.Sp))
 	return nil
 }
 
@@ -77,7 +91,9 @@ func (w *window) Clear(bg screen.Color) error {
 	return nil
 }
 
-func (w *window) Flush(character string, cursor screen.Vector2, attrs screen.CellAttrs) error {
+func (w *window) Flush(mode int, character rune, cursor screen.Vector2, attrs screen.CellAttrs) error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
 	C.flush(C.uintptr_t(w.id))
 	return nil
 }

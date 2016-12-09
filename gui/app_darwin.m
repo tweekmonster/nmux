@@ -32,10 +32,10 @@
 #endif
 
 #pragma mark - Misc {{{1
-#define RGB(c) [NSColor colorWithCalibratedRed:(CGFloat)(((c) >> 16) & 0xff) / 255 \
-                                         green:(CGFloat)(((c) >> 8) & 0xff) / 255 \
-                                          blue:(CGFloat)((c) & 0xff) / 255 \
-                                         alpha:1]
+#define RGB(c) [NSColor colorWithDeviceRed:(CGFloat)(((c) >> 16) & 0xff) / 255 \
+                                     green:(CGFloat)(((c) >> 8) & 0xff) / 255 \
+                                      blue:(CGFloat)((c) & 0xff) / 255 \
+                                     alpha:1]
 
 typedef struct {
   uint8_t attrs;
@@ -129,10 +129,11 @@ static NSRect lastWinFrame;
 
 @interface NmuxScreen : NSView <NSWindowDelegate> // {{{2
 {
-  NSMutableArray *drawOps;
-  NSMutableArray *pendingDrawOps;
   CGLayerRef screenLayer;
   NSPoint lastMouseCoords;
+  CGAffineTransform transform;
+  NSMutableArray *flushOps;
+  NSLock *drawLock;
 
   unichar *runChars;
   CGGlyph *runGlyphs;
@@ -291,10 +292,10 @@ uintptr_t newWindow(int width, int height) {// {{{
     [window setAcceptsMouseMovedEvents:YES];
 
     view = [[[NmuxScreen alloc] init] autorelease];
-    [view setGridSize:winGrid];
     [window setDelegate:view];
     [window setBackgroundColor:[NSColor blackColor]];
     [window setContentView:view];
+    [view setGridSize:winGrid];
     [window makeFirstResponder:view];
     [window makeKeyAndOrderFront:nil];
 
@@ -305,15 +306,15 @@ uintptr_t newWindow(int width, int height) {// {{{
 }// }}}
 
 void setGridSize(uintptr_t view, int cols, int rows) {
-  // DISPATCH_A(^{
+  DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     [screen setGridSize:NSMakeSize(cols, rows)];
-  // });
+  });
 }
 
 void drawText(uintptr_t view, const char *text, int length, int index,
               uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
-  // DISPATCH_A(^{
+  DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     int x = index % (int)[screen grid].width;
     int y = index / (int)[screen grid].width;
@@ -330,11 +331,11 @@ void drawText(uintptr_t view, const char *text, int length, int index,
 
     [screen addDrawOp:[DrawTextOp opWithText:str x:x y:y attrs:t]];
     free(str);
-  // });
+  });
 }
 
 void drawRepeatedText(uintptr_t view, unichar character, int length, int index, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
-  // DISPATCH_A(^{
+  DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     int x = index % (int)[screen grid].width;
     int y = index / (int)[screen grid].width;
@@ -345,26 +346,29 @@ void drawRepeatedText(uintptr_t view, unichar character, int length, int index, 
     t.bg = bg;
     t.sp = sp;
     [screen addDrawOp:[DrawRepeatedTextOp opWithCharacter:character length:length x:x y:y attrs:t]];
-  // });
+  });
 }
 
 void scrollScreen(uintptr_t view, int delta, int top, int bottom, int left, int right, int32_t bg) {
-  // DISPATCH_A(^{
-    [(NmuxScreen *)view addDrawOp:[ScrollOp opWithBg:bg delta:delta top:top
-                                              bottom:bottom left:left right:right]];
-  // });
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    [screen addDrawOp:[ScrollOp opWithBg:bg delta:delta top:top
+                                  bottom:bottom left:left right:right]];
+  });
 }
 
 void clearScreen(uintptr_t view, int32_t bg) {
-  // DISPATCH_A(^{
-    [(NmuxScreen *)view addDrawOp:[ClearOp opWithBg:bg]];
-  // });
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    [screen addDrawOp:[ClearOp opWithBg:bg]];
+  });
 }
 
 void flush(uintptr_t view) {
-  // DISPATCH_A(^{
-    [(NmuxScreen *)view flushDrawOps];
-  // });
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    [screen flushDrawOps];
+  });
 }
 
 void getCellSize(int *x, int *y) {
@@ -387,7 +391,7 @@ void spam(NmuxScreen *view) {
   for (int i = 0; i < 1000; i++) {
     int x = arc4random_uniform(mx);
     int y = arc4random_uniform(my);
-    drawText((uintptr_t)view, "Hello, World!", arc4random_uniform(x * y), 0, rand_color(), rand_color(), rand_color());
+    drawText((uintptr_t)view, "Hello, World!", 11, arc4random_uniform(x * y), 0, rand_color(), rand_color(), rand_color());
   }
   [view flushDrawOps];
 }
@@ -417,7 +421,7 @@ void spam(NmuxScreen *view) {
                    size:size];
   }
 
-  cellSize.width = ceil([f maximumAdvancement].width) + 1;
+  cellSize.width = ceil([f maximumAdvancement].width);
   cellSize.height = ceil([f ascender] + ABS([f descender]));
 
   if (font != nil) {
@@ -647,9 +651,9 @@ static void textPatternClear() {
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
   if (self = [super initWithFrame:frameRect]) {
+    drawLock = [NSLock new];
     [self setAutoresizingMask:NSViewWidthSizable|NSViewHeightSizable];
-    drawOps = [[NSMutableArray alloc] init];
-    pendingDrawOps = [[NSMutableArray alloc] init];
+    flushOps = [NSMutableArray new];
   }
   return self;
 }
@@ -667,8 +671,8 @@ static void textPatternClear() {
     free(runPositions);
   }
 
-  [drawOps release];
-  [pendingDrawOps release];
+  [flushOps removeAllObjects];
+  [flushOps release];
 
   [super dealloc];
 }
@@ -678,16 +682,6 @@ static void textPatternClear() {
 }
 
 #pragma mark - NSResponder {{{2
-- (void)setGridSize:(NSSize)size {
-  _grid = size;
-  NSSize frameSize = NSSizeMultiply(size, [nmux cellSize]);
-  NSRect winFrame = [[self window] frameRectForContentRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
-  winFrame.origin = [[self window] frame].origin;
-  [[self window] setDelegate:nil];
-  [[self window] setFrame:winFrame display:YES];
-  [[self window] setDelegate:self];
-}
-
 // Key Handling {{{
 - (void)keyDown:(NSEvent *)event {
   // We only care about the keyDown event.
@@ -1047,32 +1041,33 @@ static void textPatternClear() {
 }// }}}
 
 #pragma mark - Nmux Drawing {{{2
-- (void)addDrawOp:(id)op {
-  @synchronized(pendingDrawOps) {
-    [pendingDrawOps addObject:op];
+
+- (void)setGridSize:(NSSize)size {
+  _grid = size;
+  NSSize frameSize = NSSizeMultiply(size, [nmux cellSize]);
+  NSRect winFrame = [[self window] frameRectForContentRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
+  winFrame.origin = [[self window] frame].origin;
+  [[self window] setDelegate:nil];
+  [[self window] setFrame:winFrame display:YES];
+  [[self window] setDelegate:self];
+
+  transform = CGAffineTransformMakeScale(1, -1);
+  transform = CGAffineTransformTranslate(transform, 0, -NSHeight([self bounds]));
+
+  [drawLock lock];
+  [self lockFocus];
+  CGContextRef ctx = [[NSGraphicsContext currentContext] CGContext];
+  CGLayerRef newLayer = CGLayerCreateWithContext(ctx, frameSize, NULL);
+  if (screenLayer != NULL) {
+    CGContextDrawLayerAtPoint(ctx, CGPointApplyAffineTransform(CGPointZero, transform), screenLayer);
+    CGLayerRelease(screenLayer);
   }
+  screenLayer = newLayer;
+  [self unlockFocus];
+  [drawLock unlock];
 }
 
-- (void)flushDrawOps {
-  @synchronized(pendingDrawOps) {
-    @synchronized(drawOps) {
-      for (DrawOp *op in pendingDrawOps) {
-        [drawOps addObject:op];
-        if ([op isKindOfClass:[ClearOp class]]) {
-          [op setDirtyX:0 y:0 w:_grid.width h:_grid.height];
-        }
-
-        CGAffineTransform transform = CGAffineTransformMakeScale(1, -1);
-        transform = CGAffineTransformTranslate(transform, 0, -NSHeight([self bounds]));
-        CGRect rect = CGRectApplyAffineTransform([self bounds], transform);
-        [self setNeedsDisplayInRect:rect];
-      }
-      [pendingDrawOps removeAllObjects];
-    }
-  }
-}
-
-- (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {
+- (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {// {{{
   NSColor *bg = RGB([op attrs].bg);
   NSColor *fg = RGB([op attrs].fg);
 
@@ -1116,9 +1111,9 @@ static void textPatternClear() {
   CTFontDrawGlyphs((CTFontRef)[nmux font], runGlyphs, runPositions, runLength, ctx);
   CGContextTranslateCTM(ctx, -o.x, -o.y);
   CGContextRestoreGState(ctx);
-}
+}// }}}
 
-- (void)drawTextPatternInContext:(CGContextRef)ctx op:(DrawRepeatedTextOp *)op rect:(CGRect)rect {
+- (void)drawTextPatternInContext:(CGContextRef)ctx op:(DrawRepeatedTextOp *)op rect:(CGRect)rect {// {{{
   TextPattern tp;
   tp.c = [op character];
   tp.attrs = [op attrs];
@@ -1129,13 +1124,12 @@ static void textPatternClear() {
   CGColorSpaceRef ps = CGColorSpaceCreatePattern(NULL);
   CGContextSetFillColorSpace(ctx, ps);
   CGContextSetFillPattern(ctx, pattern, &a);
-  // CGContextSetFillColorWithColor(ctx, [[NSColor whiteColor] CGColor]);
   CGContextFillRect(ctx, rect);
   CGColorSpaceRelease(ps);
   CGContextRestoreGState(ctx);
-}
+}// }}}
 
-- (void)scrollInContext:(CGContextRef)ctx op:(ScrollOp *)op rect:(CGRect)rect {
+- (void)scrollInContext:(CGContextRef)ctx op:(ScrollOp *)op rect:(CGRect)rect {// {{{
   CGFloat offset = [op delta] * [nmux cellSize].height;
   CGRect clip = rect;
   clip.origin.y += offset;
@@ -1161,61 +1155,68 @@ static void textPatternClear() {
   CGContextFillRect(ctx, clip);
 
   CGContextRestoreGState(ctx);
-}
+}// }}}
 
 - (void)drawRect:(NSRect)dirtyRect {
-  @synchronized(drawOps) {
+  [drawLock lock];
+  if (screenLayer != NULL) {
     CGContextRef ctx = [[NSGraphicsContext currentContext] CGContext];
-    if (screenLayer == NULL) {
-      screenLayer = CGLayerCreateWithContext(ctx, [self bounds].size, NULL);
-    } else {
-      CGSize screenSize = CGLayerGetSize(screenLayer);
-      CGSize winSize = (CGSize)[self bounds].size;
-      if (screenSize.width < winSize.width || screenSize.height < winSize.height) {
-        CGContextDrawLayerAtPoint(ctx, CGPointZero, screenLayer);
-        CGLayerRef newLayer = CGLayerCreateWithContext(ctx, winSize, NULL);
-        screenLayer = newLayer;
-      }
+    CGSize screenSize = CGLayerGetSize(screenLayer);
+    CGContextDrawLayerAtPoint(ctx, CGPointMake(0, NSHeight([self bounds]) - screenSize.height), screenLayer);
+  }
+  [super drawRect:dirtyRect];
+  [drawLock unlock];
+}
+
+- (void)addDrawOp:(id)op {
+  [drawLock lock];
+  [self setNeedsDisplay: NO];
+  [flushOps addObject:op];
+  [drawLock unlock];
+}
+
+- (BOOL)needsDisplay {
+  [drawLock lock];
+  BOOL display = [flushOps count] == 0;
+  [drawLock unlock];
+  return display;
+}
+
+- (void)flushDrawOps {
+  [drawLock lock];
+  CGContextRef ctx = CGLayerGetContext(screenLayer);
+  CGContextSaveGState(ctx);
+  CGContextSetShouldSubpixelPositionFonts(ctx, YES);
+  CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
+
+  for (DrawOp *op in flushOps) {
+    if ([op isKindOfClass:[ClearOp class]]) {
+      [op setDirtyX:0 y:0 w:_grid.width h:_grid.height];
     }
 
-    CGAffineTransform transform = CGAffineTransformMakeScale(1, -1);
-    transform = CGAffineTransformTranslate(transform, 0, -NSHeight([self bounds]));
+    CGRect rect = CGRectApplyAffineTransform([op dirtyRect], transform);
 
-    if ([drawOps count] != 0) {
-      CGContextRef layerCtx = CGLayerGetContext(screenLayer);
-      // A this point, drawOps should contain everything that matches the rects
-      // obtained from getRectsBeingDrawn:count.
-
-      for (DrawOp *op in drawOps) {
-        CGContextSaveGState(layerCtx);
-        CGContextSetBlendMode(layerCtx, kCGBlendModeNormal);
-        CGRect rect = CGRectApplyAffineTransform([op dirtyRect], transform);
-
-        if ([op isKindOfClass:[ClearOp class]]) {
-          NSColor *bg = RGB([op attrs].bg);
-          CGContextSetFillColorWithColor(layerCtx, [bg CGColor]);
-          CGContextFillRect(layerCtx, rect);
-          NSLog(@"Clear %@", NSStringFromRect(rect));
-        } else if ([op isKindOfClass:[DrawTextOp class]]) {
-          [self drawTextContext:layerCtx op:(DrawTextOp *)op rect:rect];
-        } else if ([op isKindOfClass:[DrawRepeatedTextOp class]]) {
-          [self drawTextPatternInContext:layerCtx op:(DrawRepeatedTextOp *)op rect:rect];
-        } else if ([op isKindOfClass:[ScrollOp class]]) {
-          [self scrollInContext:layerCtx op:(ScrollOp *)op rect:rect];
-        }
-
-        CGContextRestoreGState(layerCtx);
-      }
-
-      [drawOps removeAllObjects];
+    if ([op isKindOfClass:[ClearOp class]]) {
+      NSColor *bg = RGB([op attrs].bg);
+      CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+      CGContextFillRect(ctx, rect);
+      textPatternClear();
+    } else if ([op isKindOfClass:[DrawTextOp class]]) {
+      [self drawTextContext:ctx op:(DrawTextOp *)op rect:rect];
+    } else if ([op isKindOfClass:[DrawRepeatedTextOp class]]) {
+      [self drawTextPatternInContext:ctx op:(DrawRepeatedTextOp *)op rect:rect];
+    } else if ([op isKindOfClass:[ScrollOp class]]) {
+      [self scrollInContext:ctx op:(ScrollOp *)op rect:rect];
     }
 
-    CGContextSetBlendMode(ctx, kCGBlendModeNormal);
-    CGContextDrawLayerAtPoint(ctx, CGPointZero, screenLayer);
+    [self setNeedsDisplayInRect:rect];
   }
 
-  [super drawRect:dirtyRect];
+  CGContextRestoreGState(ctx);
+  [flushOps removeAllObjects];
+  [drawLock unlock];
 }
+
 
 #pragma mark - Window Delegate {{{2
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize {

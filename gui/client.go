@@ -165,6 +165,7 @@ func (c *Client) parseOps(r *StreamReader) {
 			index := r.ReadEint32()
 			length := r.ReadEint32()
 			char := rune(r.ReadEint32())
+
 			win.PutRepeatedString(char, length, index, c.curStyle)
 
 		case screen.OpScroll:
@@ -194,16 +195,17 @@ func (c *Client) parseOps(r *StreamReader) {
 
 			c.palette[id] = p
 			c.ClearBG = p.Bg
+
 			win.Clear(p.Bg)
 
 		case screen.OpFlush:
-			_ = r.ReadEint32() // mode
+			mode := r.ReadEint32()
 			cursorX := r.ReadEint32()
 			cursorY := r.ReadEint32()
 			id := r.ReadEint32()
 			char := r.ReadEint32()
 
-			win.Flush(string(rune(char)), screen.Vector2{X: cursorX, Y: cursorY}, c.palette[id])
+			win.Flush(mode, rune(char), screen.Vector2{X: cursorX, Y: cursorY}, c.palette[id])
 
 		case screen.OpLog:
 			util.Print("[Server Log]", r.ReadString())
