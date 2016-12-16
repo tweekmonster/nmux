@@ -8,10 +8,62 @@ func (s *Screen) writeLog(message string) {
 	s.payload.WriteStringRun(message)
 }
 
+func (s *Screen) writeRange(i1, i2 int) {
+	run := make([]rune, 0, i2-i1)
+	p := s.payload
+	runStart := i1
+	repeated := 1
+	run = append(run, s.Buffer[i1].Char)
+	s.Buffer[i1].Sent = true
+
+	s.writeStyle(s.Buffer[i1].CellAttrs)
+
+	for i := i1 + 1; i < i2; i++ {
+		s.Buffer[i].Sent = true
+
+		if s.Buffer[i-1].Char != s.Buffer[i].Char {
+			if len(run) > 0 && repeated > 3 {
+				p.WriteOp(OpPutRep)
+				p.WriteEncodedInt(runStart)
+				p.WriteEncodedInt(repeated)
+				p.WriteEncodedInt(int(run[0]))
+				run = run[0:0]
+				runStart = i
+			}
+			repeated = 0
+			run = append(run, s.Buffer[i].Char)
+			continue
+		}
+
+		if len(run) > 0 && repeated == 0 {
+			p.WriteOp(OpPut)
+			p.WriteEncodedInt(runStart)
+			p.WriteRuneRun(run)
+			run = run[0:0]
+			runStart = i
+		}
+		repeated++
+		run = append(run, s.Buffer[i].Char)
+	}
+
+	if len(run) > 0 {
+		if repeated > 3 {
+			p.WriteOp(OpPutRep)
+			p.WriteEncodedInt(runStart)
+			p.WriteEncodedInt(repeated)
+			p.WriteEncodedInt(int(run[0]))
+		} else {
+			p.WriteOp(OpPut)
+			p.WriteEncodedInt(runStart)
+			p.WriteRuneRun(run)
+		}
+	}
+}
+
 // writeRange sends a range of characters to render.  The ranges *must* have the
 // same display attributes.  A run of the same character will be sent as a
 // "condensed" operation.
-func (s *Screen) writeRange(i1, i2 int) {
+func (s *Screen) writeRange2(i1, i2 int) {
 	run := make([]rune, 0, i2-i1)
 	runs := make([][2]int, 0, i2-i1)
 
@@ -19,7 +71,8 @@ func (s *Screen) writeRange(i1, i2 int) {
 	runStart := 0
 	runEnd := 0
 
-	s.writeStyle(s.nextAttrs)
+	s.writeStyle(s.Buffer[i1].CellAttrs)
+	s.nextAttrs = nil
 
 	for i, c := range s.Buffer[i1:i2] {
 		if c.Char == firstC {
@@ -136,8 +189,6 @@ func (s *Screen) writeSize() {
 // cell attributes that's under the cursor.  This allow the client to render the
 // cursor without needing to track the cell data.
 func (s *Screen) writeFlush() {
-	s.flushPutOps()
-
 	p := s.payload
 	p.WriteOp(OpFlush)
 
