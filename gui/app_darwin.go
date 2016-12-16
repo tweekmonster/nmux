@@ -60,6 +60,7 @@ func (w *window) PutString(s string, index int, attrs screen.CellAttrs) error {
 	if attrs.Attrs&screen.AttrReverse != 0 {
 		fg, bg = bg, fg
 	}
+
 	C.drawText(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&sbytes[0])), C.int(len(sbytes)), C.int(index), C.uint8_t(attrs.Attrs), fg, bg, C.int32_t(attrs.Sp))
 
 	return nil
@@ -73,6 +74,7 @@ func (w *window) PutRepeatedString(r rune, length, index int, attrs screen.CellA
 	if attrs.Attrs&screen.AttrReverse != 0 {
 		fg, bg = bg, fg
 	}
+
 	C.drawRepeatedText(C.uintptr_t(w.id), C.unichar(r), C.int(length), C.int(index), C.uint8_t(attrs.Attrs), fg, bg, C.int32_t(attrs.Sp))
 	return nil
 }

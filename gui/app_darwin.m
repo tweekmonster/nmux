@@ -417,7 +417,7 @@ void spam(NmuxScreen *view) {
     f = [[NSFontManager sharedFontManager]
          fontWithFamily:name
                  traits:NSUnboldFontMask|NSUnitalicFontMask
-                 weight:NSFontWeightRegular
+                 weight:5
                    size:size];
   }
 
@@ -539,7 +539,7 @@ static inline void drawTextPattern(void *info, CGContextRef ctx) {
 
   if (tp->c != ' ') {
     CGGlyph glyphs;
-    CGPoint positions = CGPointMake(0, [nmux descent]);
+    CGPoint positions = CGPointMake(ceilf([nmux firstCharPos]), ceilf([nmux descent]));
     unichar c = tp->c;
     CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
 
@@ -1056,7 +1056,7 @@ static void textPatternClear() {
 
   [drawLock lock];
   [self lockFocus];
-  CGContextRef ctx = [[NSGraphicsContext currentContext] CGContext];
+  CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
   CGLayerRef newLayer = CGLayerCreateWithContext(ctx, frameSize, NULL);
   if (screenLayer != NULL) {
     CGContextDrawLayerAtPoint(ctx, CGPointApplyAffineTransform(CGPointZero, transform), screenLayer);
@@ -1160,7 +1160,7 @@ static void textPatternClear() {
 - (void)drawRect:(NSRect)dirtyRect {
   [drawLock lock];
   if (screenLayer != NULL) {
-    CGContextRef ctx = [[NSGraphicsContext currentContext] CGContext];
+    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
     CGSize screenSize = CGLayerGetSize(screenLayer);
     CGContextDrawLayerAtPoint(ctx, CGPointMake(0, NSHeight([self bounds]) - screenSize.height), screenLayer);
   }
