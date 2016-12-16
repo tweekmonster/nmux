@@ -32,10 +32,10 @@
 #endif
 
 #pragma mark - Misc {{{1
-#define RGB(c) [NSColor colorWithDeviceRed:(CGFloat)(((c) >> 16) & 0xff) / 255 \
-                                     green:(CGFloat)(((c) >> 8) & 0xff) / 255 \
-                                      blue:(CGFloat)((c) & 0xff) / 255 \
-                                     alpha:1]
+#define RGB(c) [[NSColor colorWithDeviceRed:(CGFloat)(((c) >> 16) & 0xff) / 255 \
+                                      green:(CGFloat)(((c) >> 8) & 0xff) / 255 \
+                                       blue:(CGFloat)((c) & 0xff) / 255 \
+                                      alpha:1] CGColor]
 
 typedef struct {
   uint8_t attrs;
@@ -530,11 +530,8 @@ void spam(NmuxScreen *view) {
 // This is used for pattern fills in drawRect:
 static inline void drawTextPattern(void *info, CGContextRef ctx) {
   TextPattern *tp = (TextPattern *)info;
-  NSColor *bg = RGB(tp->attrs.bg);
-  NSColor *fg = RGB(tp->attrs.fg);
-
   CGRect bounds = CGRectMake(0, 0, [nmux cellSize].width, [nmux cellSize].height);
-  CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+  CGContextSetFillColorWithColor(ctx, RGB(tp->attrs.bg));
   CGContextFillRect(ctx, bounds);
 
   if (tp->c != ' ') {
@@ -543,7 +540,7 @@ static inline void drawTextPattern(void *info, CGContextRef ctx) {
     unichar c = tp->c;
     CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
 
-    CGContextSetFillColorWithColor(ctx, [fg CGColor]);
+    CGContextSetFillColorWithColor(ctx, RGB(tp->attrs.fg));
     CGContextSetTextDrawingMode(ctx, kCGTextFill);
     CTFontDrawGlyphs((CTFontRef)[nmux font], &glyphs, &positions, 1, ctx);
   }
@@ -1068,11 +1065,8 @@ static void textPatternClear() {
 }
 
 - (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {// {{{
-  NSColor *bg = RGB([op attrs].bg);
-  NSColor *fg = RGB([op attrs].fg);
-
   CGContextSaveGState(ctx);
-  CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+  CGContextSetFillColorWithColor(ctx, RGB([op attrs].bg));
   CGContextFillRect(ctx, rect);
 
   size_t runLength = (size_t)[[op text] length];
@@ -1101,7 +1095,7 @@ static void textPatternClear() {
     runPositions[i] = CGPointMake(i * cellSize.width, 0);
   }
 
-  CGContextSetFillColorWithColor(ctx, [fg CGColor]);
+  CGContextSetFillColorWithColor(ctx, RGB([op attrs].fg));
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
   CGPoint o = rect.origin;
@@ -1149,9 +1143,8 @@ static void textPatternClear() {
     clip.origin.y = rect.origin.y;
   }
 
-  NSColor *bg = RGB([op attrs].bg);
   clip.size.height = fabs(offset);
-  CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+  CGContextSetFillColorWithColor(ctx, RGB([op attrs].bg));
   CGContextFillRect(ctx, clip);
 
   CGContextRestoreGState(ctx);
@@ -1197,8 +1190,7 @@ static void textPatternClear() {
     CGRect rect = CGRectApplyAffineTransform([op dirtyRect], transform);
 
     if ([op isKindOfClass:[ClearOp class]]) {
-      NSColor *bg = RGB([op attrs].bg);
-      CGContextSetFillColorWithColor(ctx, [bg CGColor]);
+      CGContextSetFillColorWithColor(ctx, RGB([op attrs].bg));
       CGContextFillRect(ctx, rect);
       textPatternClear();
     } else if ([op isKindOfClass:[DrawTextOp class]]) {
