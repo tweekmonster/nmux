@@ -1,5 +1,5 @@
 hash: 4818c5b0a6793a83364866b68bdbe89a12a7a6edd300d842886ed55ef088242f
-updated: 2016-12-07T16:54:31.537694384-05:00
+updated: 2016-12-21T00:55:48.942140865-05:00
 imports:
 - name: github.com/fatih/color
   version: dea9d3a26a087187530244679c1cfb3a42937794
@@ -10,17 +10,17 @@ imports:
 - name: github.com/mattn/go-runewidth
   version: d6bea18f789704b5f83375793155289da36a3c7f
 - name: github.com/neovim/go-client
-  version: c5f748f326fdc70c37110fa5867bce647e0d517c
+  version: b4d0001757af5980b20bf246e900b9b0976a0a00
   subpackages:
   - msgpack
   - msgpack/rpc
   - nvim
 - name: golang.org/x/net
-  version: de22433a9fb633cca81708735cd52c3b7b205ecf
+  version: 45e771701b814666a7eb299e6c7a57d0b1799e91
   subpackages:
   - websocket
 - name: golang.org/x/sys
-  version: 478fcf54317e52ab69f40bb4c7a1520288d7f7ea
+  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
   subpackages:
   - unix
 testImports: []

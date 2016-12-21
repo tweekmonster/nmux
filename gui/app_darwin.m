@@ -22,20 +22,23 @@
 // Don't use GCD when running standalone.
 #define DISPATCH_S(block) (block)()
 #define DISPATCH_A(block) (block)()
+#define DISPATCH_D(block, delay) (block)()
 
 #else
 
 #import "_cgo_export.h"
 #define DISPATCH_S(block) dispatch_sync(dispatch_get_main_queue(), (block))
 #define DISPATCH_A(block) dispatch_async(dispatch_get_main_queue(), (block))
+#define DISPATCH_D(block, delay) dispatch_after(dispatch_time(DISPATCH_TIME_NOW, delay * NSEC_PER_MSEC), dispatch_get_main_queue(), (block))
 
 #endif
 
 #pragma mark - Misc {{{1
-#define RGB(c) [[NSColor colorWithDeviceRed:(CGFloat)(((c) >> 16) & 0xff) / 255 \
-                                      green:(CGFloat)(((c) >> 8) & 0xff) / 255 \
-                                       blue:(CGFloat)((c) & 0xff) / 255 \
-                                      alpha:1] CGColor]
+#define NSRGB(c) [NSColor colorWithDeviceRed:(CGFloat)(((c) >> 16) & 0xff) / 255 \
+                                       green:(CGFloat)(((c) >> 8) & 0xff) / 255 \
+                                        blue:(CGFloat)((c) & 0xff) / 255 \
+                                       alpha:1]
+#define CGRGB(c) [NSRGB(c) CGColor]
 
 typedef struct {
   uint8_t attrs;
@@ -77,6 +80,9 @@ static NSRect lastWinFrame;
 @end
 
 @interface DrawOp : NSObject
+{
+  NSRect _dirtyRect;
+}
 
 @property (atomic, readonly) NSRect dirtyRect;
 @property (atomic) TextAttr attrs;
@@ -85,15 +91,17 @@ static NSRect lastWinFrame;
 @end
 
 
-@interface DrawTextOp : DrawOp; // {{{2
-
+@interface DrawTextOp : DrawOp // {{{2
+{
+  NSString *_text;
+}
 @property (atomic, retain) NSString *text;
 
 + (DrawTextOp *)opWithText:(const char *)text x:(int)x y:(int)y
                      attrs:(TextAttr)attrs;
 @end
 
-@interface DrawRepeatedTextOp : DrawOp; // {{{2
+@interface DrawRepeatedTextOp : DrawOp // {{{2
 
 @property (atomic) unichar character;
 @property (atomic) int length;
@@ -104,7 +112,7 @@ static NSRect lastWinFrame;
 @end
 
 
-@interface ClearOp : DrawOp; // {{{2
+@interface ClearOp : DrawOp // {{{2
 
 + (ClearOp *)opWithBg:(int32_t)bg;
 @end
@@ -129,9 +137,17 @@ static NSRect lastWinFrame;
 
 @interface NmuxScreen : NSView <NSWindowDelegate> // {{{2
 {
+  NSSize _grid;
+
   CGLayerRef screenLayer;
+  CGLayerRef cursorLayer;
+  NSRect cursorRect;
+  BOOL cursorVisible;
+  BOOL didFlush;
+
   NSPoint lastMouseCoords;
   CGAffineTransform transform;
+  CGAffineTransform cursorTransform;
   NSMutableArray *flushOps;
   NSLock *drawLock;
 
@@ -145,7 +161,7 @@ static NSRect lastWinFrame;
 
 - (void)setGridSize:(NSSize)size;
 - (void)addDrawOp:(DrawOp *)op;
-- (void)flushDrawOps;
+- (void)flushDrawOps:(unichar)character pos:(NSPoint)cursorPos attrs:(TextAttr)attrs;
 @end
 
 
@@ -364,11 +380,33 @@ void clearScreen(uintptr_t view, int32_t bg) {
   });
 }
 
-void flush(uintptr_t view) {
-  DISPATCH_A(^{
+void flush(uintptr_t view, int x, int y, unichar character, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
+  static int last = 0;
+  last++;
+  int current = last;
+
+  // Delays the flush by about 3ms to keep the cursor from bouncing all over the
+  // place.  This is based on "feels".
+  // XXX: Might need to auto-adjust by measuring a roundtrip of calls between Go
+  // and GCD.  Or the delay needs to happen server side.
+  DISPATCH_D(^{
+    if (current != last) {
+      return;
+    }
+
     NmuxScreen *screen = (NmuxScreen *)view;
-    [screen flushDrawOps];
-  });
+    TextAttr ta;
+
+    ta.attrs = attrs;
+    ta.fg = fg;
+    ta.bg = bg;
+    ta.sp = sp;
+
+    NSPoint pos;
+    pos.x = x;
+    pos.y = y;
+    [screen flushDrawOps:character pos:pos attrs:ta];
+  }, 3);
 }
 
 void getCellSize(int *x, int *y) {
@@ -393,7 +431,13 @@ void spam(NmuxScreen *view) {
     int y = arc4random_uniform(my);
     drawText((uintptr_t)view, "Hello, World!", 11, arc4random_uniform(x * y), 0, rand_color(), rand_color(), rand_color());
   }
-  [view flushDrawOps];
+
+  TextAttr ta;
+  ta.attrs = 0;
+  ta.fg = fg;
+  ta.bg = bg;
+  ta.sp = 0;
+  [view flushDrawOps:'X' pos:NSMakePoint(0, 0) attrs:ta];
 }
 #endif
 
@@ -483,6 +527,7 @@ void spam(NmuxScreen *view) {
 
 #pragma mark - DrawOp {{{1
 @implementation DrawOp : NSObject
+
 - (void)setDirtyX:(int)x y:(int)y w:(int)w h:(int)h {
   NSSize cellSize = [nmux cellSize];
   _dirtyRect.origin.x = (CGFloat)x * cellSize.width;
@@ -531,7 +576,7 @@ void spam(NmuxScreen *view) {
 static inline void drawTextPattern(void *info, CGContextRef ctx) {
   TextPattern *tp = (TextPattern *)info;
   CGRect bounds = CGRectMake(0, 0, [nmux cellSize].width, [nmux cellSize].height);
-  CGContextSetFillColorWithColor(ctx, RGB(tp->attrs.bg));
+  CGContextSetFillColorWithColor(ctx, CGRGB(tp->attrs.bg));
   CGContextFillRect(ctx, bounds);
 
   if (tp->c != ' ') {
@@ -540,7 +585,7 @@ static inline void drawTextPattern(void *info, CGContextRef ctx) {
     unichar c = tp->c;
     CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
 
-    CGContextSetFillColorWithColor(ctx, RGB(tp->attrs.fg));
+    CGContextSetFillColorWithColor(ctx, CGRGB(tp->attrs.fg));
     CGContextSetTextDrawingMode(ctx, kCGTextFill);
     CTFontDrawGlyphs((CTFontRef)[nmux font], &glyphs, &positions, 1, ctx);
   }
@@ -1051,6 +1096,10 @@ static void textPatternClear() {
   transform = CGAffineTransformMakeScale(1, -1);
   transform = CGAffineTransformTranslate(transform, 0, -NSHeight([self bounds]));
 
+  cursorTransform = CGAffineTransformMakeScale(1, -1);
+  cursorTransform = CGAffineTransformTranslate(cursorTransform, 0,
+                                               -[nmux cellSize].height);
+
   [drawLock lock];
   [self lockFocus];
   CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
@@ -1060,13 +1109,24 @@ static void textPatternClear() {
     CGLayerRelease(screenLayer);
   }
   screenLayer = newLayer;
+
+  if (cursorLayer == NULL) {
+    cursorLayer = CGLayerCreateWithContext(ctx, [nmux cellSize], NULL);
+  } else {
+    CGSize cursorSize = CGLayerGetSize(cursorLayer);
+    if (!CGSizeEqualToSize(cursorSize, [nmux cellSize])) {
+      CGLayerRelease(cursorLayer);
+      cursorLayer = CGLayerCreateWithContext(ctx, [nmux cellSize], NULL);
+    }
+  }
+
   [self unlockFocus];
   [drawLock unlock];
 }
 
 - (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {// {{{
   CGContextSaveGState(ctx);
-  CGContextSetFillColorWithColor(ctx, RGB([op attrs].bg));
+  CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
   CGContextFillRect(ctx, rect);
 
   size_t runLength = (size_t)[[op text] length];
@@ -1091,11 +1151,11 @@ static void textPatternClear() {
   CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], runChars,
                                runGlyphs, runLength);
 
-  for (int i = 0; i < runLength; i++) {
+  for (size_t i = 0; i < runLength; i++) {
     runPositions[i] = CGPointMake(i * cellSize.width, 0);
   }
 
-  CGContextSetFillColorWithColor(ctx, RGB([op attrs].fg));
+  CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].fg));
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
   CGPoint o = rect.origin;
@@ -1144,7 +1204,7 @@ static void textPatternClear() {
   }
 
   clip.size.height = fabs(offset);
-  CGContextSetFillColorWithColor(ctx, RGB([op attrs].bg));
+  CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
   CGContextFillRect(ctx, clip);
 
   CGContextRestoreGState(ctx);
@@ -1152,31 +1212,40 @@ static void textPatternClear() {
 
 - (void)drawRect:(NSRect)dirtyRect {
   [drawLock lock];
+  CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+
   if (screenLayer != NULL) {
-    CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
     CGSize screenSize = CGLayerGetSize(screenLayer);
     CGContextDrawLayerAtPoint(ctx, CGPointMake(0, NSHeight([self bounds]) - screenSize.height), screenLayer);
   }
+
+  if (cursorVisible && cursorLayer != NULL) {
+    CGContextDrawLayerAtPoint(ctx, cursorRect.origin, cursorLayer);
+  }
+
   [super drawRect:dirtyRect];
+  didFlush = NO;
   [drawLock unlock];
 }
 
 - (void)addDrawOp:(id)op {
   [drawLock lock];
-  [self setNeedsDisplay: NO];
+  didFlush = NO;
   [flushOps addObject:op];
   [drawLock unlock];
 }
 
 - (BOOL)needsDisplay {
   [drawLock lock];
-  BOOL display = [flushOps count] == 0;
+  BOOL display = didFlush;
   [drawLock unlock];
   return display;
 }
 
-- (void)flushDrawOps {
+- (void)flushDrawOps:(unichar)character pos:(NSPoint)cursorPos attrs:(TextAttr)attrs {
   [drawLock lock];
+  cursorVisible = NO;
+
   CGContextRef ctx = CGLayerGetContext(screenLayer);
   CGContextSaveGState(ctx);
   CGContextSetShouldSubpixelPositionFonts(ctx, YES);
@@ -1190,7 +1259,7 @@ static void textPatternClear() {
     CGRect rect = CGRectApplyAffineTransform([op dirtyRect], transform);
 
     if ([op isKindOfClass:[ClearOp class]]) {
-      CGContextSetFillColorWithColor(ctx, RGB([op attrs].bg));
+      CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
       CGContextFillRect(ctx, rect);
       textPatternClear();
     } else if ([op isKindOfClass:[DrawTextOp class]]) {
@@ -1206,6 +1275,33 @@ static void textPatternClear() {
 
   CGContextRestoreGState(ctx);
   [flushOps removeAllObjects];
+
+  cursorVisible = YES;
+  ctx = CGLayerGetContext(cursorLayer);
+  CGContextSaveGState(ctx);
+  CGContextSetShouldSubpixelPositionFonts(ctx, YES);
+  CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
+
+  if (!NSEqualRects(cursorRect, NSZeroRect)) {
+    [self setNeedsDisplayInRect:cursorRect];
+  }
+
+  NSString *cursorChar = [NSString stringWithCharacters:&character length:1];
+  DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String] x:0 y:0 attrs:attrs];
+  CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
+                            (cursorPos.y ) * cellSize.height);
+  CGRect rect = CGRectApplyAffineTransform([op dirtyRect], cursorTransform);
+  // CGContextSetFillColorWithColor(ctx, [[NSColor redColor] CGColor]);
+  // CGContextFillRect(ctx, [op dirtyRect]);
+  [self drawTextContext:ctx op:op rect:rect];
+  cursorRect.origin = pos;
+  cursorRect.size = [nmux cellSize];
+  cursorRect = CGRectApplyAffineTransform(cursorRect, transform);
+  [self setNeedsDisplayInRect:cursorRect];
+
+  CGContextRestoreGState(ctx);
+  didFlush = YES;
+
   [drawLock unlock];
 }
 

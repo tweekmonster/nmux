@@ -14,7 +14,7 @@ void drawText(uintptr_t, const char *, int, int, uint8_t, int32_t, int32_t, int3
 void drawRepeatedText(uintptr_t, unichar, int, int, uint8_t, int32_t, int32_t, int32_t);
 void clearScreen(uintptr_t, int32_t);
 void scrollScreen(uintptr_t, int, int, int, int, int, int32_t);
-void flush(uintptr_t);
+void flush(uintptr_t, int, int, unichar, uint8_t, int32_t, int32_t, int32_t);
 void getCellSize(int*, int*);
 */
 import "C"
@@ -96,7 +96,12 @@ func (w *window) Clear(bg screen.Color) error {
 func (w *window) Flush(mode int, character rune, cursor screen.Vector2, attrs screen.CellAttrs) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	C.flush(C.uintptr_t(w.id))
+	fg := C.int32_t(attrs.Fg)
+	bg := C.int32_t(attrs.Bg)
+	if attrs.Attrs&screen.AttrReverse != 0 {
+		fg, bg = bg, fg
+	}
+	C.flush(C.uintptr_t(w.id), C.int(cursor.X), C.int(cursor.Y), C.unichar(character), C.uint8_t(attrs.Attrs), bg, fg, C.int32_t(attrs.Sp))
 	return nil
 }
 

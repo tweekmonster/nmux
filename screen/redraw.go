@@ -149,8 +149,10 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 
 	case "set_title":
 		s.Title = args.String()
+		log.Println("set_title")
 
 	case "set_icon":
+		log.Println("set_icon")
 
 	case "mouse_on":
 		s.Mouse = true
@@ -173,6 +175,7 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		log.Println("Not Busy")
 
 	case "suspend":
+		log.Println("suspend")
 
 	case "bell":
 		log.Println("Bell")
@@ -237,13 +240,11 @@ oploop:
 		}
 	}
 
-	if s.screenOps > 0 {
-		s.flushScreen(false)
-		if err := s.flush(); err != nil {
-			log.Println("Couldn't flush data:", err)
-		}
-		s.screenOps = 0
+	s.flushScreen(false)
+	if err := s.flush(); err != nil {
+		log.Println("Couldn't flush data:", err)
 	}
+	s.screenOps = 0
 
 	// s.dump()
 }

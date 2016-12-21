@@ -80,12 +80,13 @@
 		E0FAC88D1DF5042100CCB0E7 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
+				CLASSPREFIX = dab;
 				LastUpgradeCheck = 0810;
-				ORGANIZATIONNAME = Tommy;
+				ORGANIZATIONNAME = esdf.io;
 				TargetAttributes = {
 					E0FAC8941DF5042100CCB0E7 = {
 						CreatedOnToolsVersion = 8.1;
-						ProvisioningStyle = Manual;
+						ProvisioningStyle = Automatic;
 					};
 				};
 			};
@@ -209,7 +210,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_ARC = NO;
-				CODE_SIGN_IDENTITY = "Mac Developer";
+				CODE_SIGN_IDENTITY = "";
 				DEVELOPMENT_TEAM = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};
@@ -219,7 +220,7 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CLANG_ENABLE_OBJC_ARC = NO;
-				CODE_SIGN_IDENTITY = "Mac Developer";
+				CODE_SIGN_IDENTITY = "";
 				DEVELOPMENT_TEAM = "";
 				PRODUCT_NAME = "$(TARGET_NAME)";
 			};

@@ -1,0 +1,5 @@
+-O0
+-std=gnu99
+
+# Feature of deoplete-clang2 (electric boogaloo)
+-darwin=10.8

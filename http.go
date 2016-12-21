@@ -83,7 +83,9 @@ func websocketHandler(ws *websocket.Conn) {
 		closeInput()
 	}()
 
-	proc.SetSink(ws)
+	if err := proc.Attach(ws); err != nil {
+		util.Print("Attach err:", err)
+	}
 
 mainloop:
 	for {
@@ -123,6 +125,10 @@ mainloop:
 	}
 
 	closeInput()
+
+	if err := proc.Detach(); err != nil {
+		util.Print("Detach err:", err)
+	}
 
 	util.Print("Connection stopped:", ws.RemoteAddr())
 }
