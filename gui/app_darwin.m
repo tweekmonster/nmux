@@ -529,6 +529,7 @@ void spam(NmuxScreen *view) {
 @implementation DrawOp : NSObject
 
 - (void)setDirtyX:(int)x y:(int)y w:(int)w h:(int)h {
+  _bounds = NSMakeRect(x, y, w, h);
   NSSize cellSize = [nmux cellSize];
   _dirtyRect.origin.x = (CGFloat)x * cellSize.width;
   _dirtyRect.origin.y = (CGFloat)y * cellSize.height;
@@ -581,7 +582,7 @@ static inline void drawTextPattern(void *info, CGContextRef ctx) {
 
   if (tp->c != ' ') {
     CGGlyph glyphs;
-    CGPoint positions = CGPointMake(ceilf([nmux firstCharPos]), ceilf([nmux descent]));
+    CGPoint positions = CGPointMake([nmux firstCharPos], [nmux descent]);
     unichar c = tp->c;
     CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
 
@@ -1126,6 +1127,7 @@ static void textPatternClear() {
 
 - (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {// {{{
   CGContextSaveGState(ctx);
+  CGContextClipToRect(ctx, rect);
   CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
   CGContextFillRect(ctx, rect);
 
@@ -1159,8 +1161,8 @@ static void textPatternClear() {
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
   CGPoint o = rect.origin;
-  o.x += ceilf([nmux firstCharPos]);
-  o.y += ceilf(descent);
+  o.x += [nmux firstCharPos];
+  o.y += descent;
   CGContextTranslateCTM(ctx, o.x, o.y);
   CTFontDrawGlyphs((CTFontRef)[nmux font], runGlyphs, runPositions, runLength, ctx);
   CGContextTranslateCTM(ctx, -o.x, -o.y);
