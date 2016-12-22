@@ -1,6 +1,9 @@
 package screen
 
-import "log"
+import (
+	"log"
+	"time"
+)
 
 func (s *Screen) redrawOp(op string, args *opArgs) {
 	// defer func() {
@@ -22,7 +25,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.writeClear()
 
 	case "eol_clear":
-		s.screenOps++
 		s.clearLine(s.Cursor.X, s.Cursor.Y)
 
 	case "cursor_goto":
@@ -91,7 +93,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.CurAttrs = &attrs
 
 	case "put":
-		s.screenOps++
 		i := s.Cursor.Y*s.Size.X + s.Cursor.X
 		for _, c := range args.String() {
 			s.setChar(i, c)
@@ -105,8 +106,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.scroll.br.X = args.Int()
 
 	case "scroll":
-		s.screenOps++
-
 		amount := args.Int()
 		sr := s.scroll
 		blank := make([]Cell, (sr.br.X-sr.tl.X)+1)
@@ -184,7 +183,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		log.Println("Visual bell")
 
 	case "mode_change":
-		s.screenOps++
 		mode := args.String()
 		log.Println("Mode change:", mode)
 
@@ -209,13 +207,23 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 	}
 }
 
-func (s *Screen) RedrawHandler(updates ...[]interface{}) {
-	if len(updates) == 0 {
+func (s *Screen) redrawFinalize(curFlush int) {
+	<-time.After(time.Millisecond * 5)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.flushCount != curFlush {
 		return
 	}
 
+	if err := s.flush(true); err != nil {
+		log.Println("Couldn't flush data:", err)
+	}
+}
+
+func (s *Screen) RedrawHandler(updates ...[]interface{}) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.flushCount++
 
 oploop:
 	for _, args := range updates {
@@ -241,10 +249,9 @@ oploop:
 	}
 
 	s.flushScreen(false)
-	if err := s.flush(); err != nil {
+	if err := s.flush(false); err != nil {
 		log.Println("Couldn't flush data:", err)
 	}
-	s.screenOps = 0
-
-	// s.dump()
+	s.mu.Unlock()
+	go s.redrawFinalize(s.flushCount)
 }

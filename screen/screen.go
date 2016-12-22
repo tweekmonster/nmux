@@ -69,7 +69,7 @@ type Screen struct {
 
 	attrID uint32
 
-	screenOps int
+	flushCount int
 
 	// Region to scroll.
 	scroll ScrollRegion
@@ -116,7 +116,7 @@ func (s *Screen) SetSink(w io.Writer) {
 	s.writeSize()
 	s.writeClear()
 	s.flushScreen(true)
-	s.flush()
+	s.flush(true)
 }
 
 func (s *Screen) flushScreen(all bool) {

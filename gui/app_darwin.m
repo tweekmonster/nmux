@@ -55,6 +55,16 @@ typedef struct TP {
   struct TP *next;
 } TextPattern;
 
+typedef enum _Mode {
+  ModeBusy    = 1 << 0,
+  ModeMouseOn = 1 << 1,
+  ModeNormal  = 1 << 2,
+  ModeInsert  = 1 << 3,
+  ModeReplace = 1 << 4,
+  ModeRedraw  = 1 << 5,
+  ModeEnd     = 1 << 6,
+} Mode;
+
 static TextPattern *firstPattern = NULL;
 
 static NSFont *font;
@@ -138,11 +148,12 @@ static NSRect lastWinFrame;
 @interface NmuxScreen : NSView <NSWindowDelegate> // {{{2
 {
   NSSize _grid;
+  Mode _state;
 
   CGLayerRef screenLayer;
   CGLayerRef cursorLayer;
   NSRect cursorRect;
-  BOOL cursorVisible;
+  BOOL cursorUpdate;
   BOOL didFlush;
 
   NSPoint lastMouseCoords;
@@ -158,6 +169,7 @@ static NSRect lastWinFrame;
 }
 
 @property (atomic) NSSize grid;
+@property (atomic) Mode state;
 
 - (void)setGridSize:(NSSize)size;
 - (void)addDrawOp:(DrawOp *)op;
@@ -380,21 +392,11 @@ void clearScreen(uintptr_t view, int32_t bg) {
   });
 }
 
-void flush(uintptr_t view, int x, int y, unichar character, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
-  static int last = 0;
-  last++;
-  int current = last;
-
-  // Delays the flush by about 3ms to keep the cursor from bouncing all over the
-  // place.  This is based on "feels".
-  // XXX: Might need to auto-adjust by measuring a roundtrip of calls between Go
-  // and GCD.  Or the delay needs to happen server side.
-  DISPATCH_D(^{
-    if (current != last) {
-      return;
-    }
-
+void flush(uintptr_t view, int mode, int x, int y, unichar character, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
+  DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
+    [screen setState:(Mode)mode];
+
     TextAttr ta;
 
     ta.attrs = attrs;
@@ -406,7 +408,7 @@ void flush(uintptr_t view, int x, int y, unichar character, uint8_t attrs, int32
     pos.x = x;
     pos.y = y;
     [screen flushDrawOps:character pos:pos attrs:ta];
-  }, 3);
+  });
 }
 
 void getCellSize(int *x, int *y) {
@@ -699,6 +701,11 @@ static void textPatternClear() {
     flushOps = [NSMutableArray new];
   }
   return self;
+}
+
+- (void)setState:(Mode)state {
+  cursorUpdate = (state & ModeRedraw) != ModeRedraw;
+  _state = state;
 }
 
 - (void)dealloc {
@@ -1221,7 +1228,7 @@ static void textPatternClear() {
     CGContextDrawLayerAtPoint(ctx, CGPointMake(0, NSHeight([self bounds]) - screenSize.height), screenLayer);
   }
 
-  if (cursorVisible && cursorLayer != NULL) {
+  if (cursorLayer != NULL) {
     CGContextDrawLayerAtPoint(ctx, cursorRect.origin, cursorLayer);
   }
 
@@ -1246,7 +1253,6 @@ static void textPatternClear() {
 
 - (void)flushDrawOps:(unichar)character pos:(NSPoint)cursorPos attrs:(TextAttr)attrs {
   [drawLock lock];
-  cursorVisible = NO;
 
   CGContextRef ctx = CGLayerGetContext(screenLayer);
   CGContextSaveGState(ctx);
@@ -1278,30 +1284,30 @@ static void textPatternClear() {
   CGContextRestoreGState(ctx);
   [flushOps removeAllObjects];
 
-  cursorVisible = YES;
-  ctx = CGLayerGetContext(cursorLayer);
-  CGContextSaveGState(ctx);
-  CGContextSetShouldSubpixelPositionFonts(ctx, YES);
-  CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
-
   if (!NSEqualRects(cursorRect, NSZeroRect)) {
     [self setNeedsDisplayInRect:cursorRect];
   }
 
-  NSString *cursorChar = [NSString stringWithCharacters:&character length:1];
-  DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String] x:0 y:0 attrs:attrs];
-  CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
-                            (cursorPos.y ) * cellSize.height);
-  CGRect rect = CGRectApplyAffineTransform([op dirtyRect], cursorTransform);
-  // CGContextSetFillColorWithColor(ctx, [[NSColor redColor] CGColor]);
-  // CGContextFillRect(ctx, [op dirtyRect]);
-  [self drawTextContext:ctx op:op rect:rect];
-  cursorRect.origin = pos;
-  cursorRect.size = [nmux cellSize];
-  cursorRect = CGRectApplyAffineTransform(cursorRect, transform);
-  [self setNeedsDisplayInRect:cursorRect];
+  if (cursorUpdate) {
+    ctx = CGLayerGetContext(cursorLayer);
+    CGContextSaveGState(ctx);
+    CGContextSetShouldSubpixelPositionFonts(ctx, YES);
+    CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
 
-  CGContextRestoreGState(ctx);
+    NSString *cursorChar = [NSString stringWithCharacters:&character length:1];
+    DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String] x:0 y:0 attrs:attrs];
+    CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
+                              (cursorPos.y ) * cellSize.height);
+    CGRect rect = CGRectApplyAffineTransform([op dirtyRect], cursorTransform);
+    [self drawTextContext:ctx op:op rect:rect];
+    cursorRect.origin = pos;
+    cursorRect.size = [nmux cellSize];
+    cursorRect = CGRectApplyAffineTransform(cursorRect, transform);
+    [self setNeedsDisplayInRect:cursorRect];
+
+    CGContextRestoreGState(ctx);
+  }
+
   didFlush = YES;
 
   [drawLock unlock];

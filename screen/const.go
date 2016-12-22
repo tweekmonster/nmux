@@ -42,6 +42,7 @@ const (
 	ModeNormal
 	ModeInsert
 	ModeReplace
+	ModeRedraw
 	ModeEnd
 )
 

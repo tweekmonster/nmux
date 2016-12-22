@@ -188,7 +188,7 @@ func (s *Screen) writeSize() {
 // Flush the operations and send the final state and cursor position along with
 // cell attributes that's under the cursor.  This allow the client to render the
 // cursor without needing to track the cell data.
-func (s *Screen) writeFlush() {
+func (s *Screen) writeFlush(displayCursor bool) {
 	p := s.payload
 	p.WriteOp(OpFlush)
 
@@ -201,6 +201,10 @@ func (s *Screen) writeFlush() {
 		state |= ModeMouseOn
 	}
 
+	if !displayCursor {
+		state |= ModeRedraw
+	}
+
 	i := s.Cursor.Y*s.Size.X + s.Cursor.X
 	if i >= len(s.Buffer) {
 		i = len(s.Buffer) - 1
@@ -211,8 +215,8 @@ func (s *Screen) writeFlush() {
 }
 
 // Flush operations into the sink.
-func (s *Screen) flush() error {
-	s.writeFlush()
+func (s *Screen) flush(displayCursor bool) error {
+	s.writeFlush(displayCursor)
 	defer s.payload.Truncate(0)
 
 	data := s.payload.Bytes()
