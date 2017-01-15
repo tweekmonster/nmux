@@ -91,6 +91,7 @@ static NSRect lastWinFrame;
 
 @interface DrawOp : NSObject
 {
+  NSRect _bounds;
   NSRect _dirtyRect;
 }
 
