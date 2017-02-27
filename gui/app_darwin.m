@@ -704,6 +704,10 @@ static void textPatternClear() {
   return self;
 }
 
+- (Mode)state {
+  return _state;
+}
+
 - (void)setState:(Mode)state {
   cursorUpdate = (state & ModeRedraw) != ModeRedraw;
   _state = state;
