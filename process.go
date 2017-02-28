@@ -3,6 +3,7 @@ package nmux
 import (
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"os"
 	"sync"
@@ -62,6 +63,7 @@ type msg struct {
 
 func NewProcess(cwd string, width, height int) (*Process, error) {
 	n, err := nvim.NewEmbedded(&nvim.EmbedOptions{
+		// Path: "/home/tallen/tmp/nvim/bin/nvim",
 		Env: os.Environ(),
 		Dir: cwd,
 		Logf: func(msg string, args ...interface{}) {
@@ -73,13 +75,16 @@ func NewProcess(cwd string, width, height int) (*Process, error) {
 		return nil, err
 	}
 
+	scr := screen.NewScreen(width, height)
+	n.RegisterHandler("redraw", scr.RedrawHandler)
+
 	procs.id++
 	deadman := make(chan int)
 	proc := &Process{
 		ID:      procs.id,
 		nvim:    n,
 		Deadman: deadman,
-		Screen:  screen.NewScreen(width, height),
+		Screen:  scr,
 	}
 
 	addProcess(proc)
@@ -94,8 +99,6 @@ func NewProcess(cwd string, width, height int) (*Process, error) {
 		fmt.Println("Dead")
 	}()
 
-	n.RegisterHandler("redraw", proc.Screen.RedrawHandler)
-
 	if err := n.AttachUI(proc.Size.X, proc.Size.Y, map[string]interface{}{
 		"rgb":                true,
 		"popupmenu_external": false,
@@ -104,6 +107,16 @@ func NewProcess(cwd string, width, height int) (*Process, error) {
 	}
 
 	return proc, nil
+}
+
+func (p *Process) Attach(w io.Writer) error {
+	p.Screen.SetSink(w)
+	return nil
+}
+
+func (p *Process) Detach() error {
+	p.Screen.SetSink(nil)
+	return nil
 }
 
 func (p *Process) IsRunning() bool {

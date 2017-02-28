@@ -42,6 +42,7 @@ const (
 	ModeNormal
 	ModeInsert
 	ModeReplace
+	ModeRedraw
 	ModeEnd
 )
 
@@ -53,7 +54,7 @@ func init() {
 	o := OpEnd
 	for o > 0 {
 		o--
-		s := o.String()
+		s := fmt.Sprintf("%s", o)
 		if strings.ContainsRune(s, '(') {
 			continue
 		}
@@ -65,7 +66,7 @@ func init() {
 	a := AttrEnd
 	for a > 0 {
 		a--
-		s := a.String()
+		s := fmt.Sprintf("%s", a)
 		if strings.ContainsRune(s, '(') {
 			continue
 		}
@@ -76,7 +77,7 @@ func init() {
 	m := ModeEnd
 	for m > 0 {
 		m--
-		s := m.String()
+		s := fmt.Sprintf("%s", m)
 		if strings.ContainsRune(s, '(') {
 			continue
 		}

@@ -1,6 +1,9 @@
 package screen
 
-import "log"
+import (
+	"log"
+	"time"
+)
 
 func (s *Screen) redrawOp(op string, args *opArgs) {
 	// defer func() {
@@ -11,22 +14,11 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 
 	switch op {
 	case "resize":
-		s.flushPutOps()
 		s.setSize(args.Int(), args.Int())
 		s.writeSize()
 
 	case "clear":
-		s.flushPutOps()
-		s.charUpdate.X = 0
-		s.charUpdate.Y = -1
-		s.charTracking = false
-		i1 := 0
-		i2 := len(s.Buffer)
-		for i1 < i2 {
-			s.setChar(i1, ' ')
-			i1++
-		}
-		s.charTracking = true
+		s.clearScreen()
 		s.Cursor.X = 0
 		s.Cursor.Y = 0
 
@@ -50,8 +42,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.DefaultAttrs.Sp = Color(args.Int())
 
 	case "highlight_set":
-		s.flushPutOps()
-
 		m := args.Map()
 		attrs := *s.DefaultAttrs
 
@@ -94,7 +84,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 			e.id = 0
 			if attrs == e {
 				s.CurAttrs = existing
-				s.nextAttrs = existing
 				return
 			}
 		}
@@ -102,7 +91,6 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.attrID++
 		attrs.id = s.attrID
 		s.CurAttrs = &attrs
-		s.nextAttrs = s.CurAttrs
 
 	case "put":
 		i := s.Cursor.Y*s.Size.X + s.Cursor.X
@@ -118,14 +106,13 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		s.scroll.br.X = args.Int()
 
 	case "scroll":
-		s.flushPutOps()
-
 		amount := args.Int()
 		sr := s.scroll
 		blank := make([]Cell, (sr.br.X-sr.tl.X)+1)
 		for i := range blank {
 			blank[i].Char = ' '
-			blank[i].CellAttrs = s.CurAttrs
+			blank[i].Sent = false
+			blank[i].CellAttrs = s.DefaultAttrs
 		}
 
 		ys := amount
@@ -161,8 +148,10 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 
 	case "set_title":
 		s.Title = args.String()
+		log.Println("set_title")
 
 	case "set_icon":
+		log.Println("set_icon")
 
 	case "mouse_on":
 		s.Mouse = true
@@ -185,6 +174,7 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 		log.Println("Not Busy")
 
 	case "suspend":
+		log.Println("suspend")
 
 	case "bell":
 		log.Println("Bell")
@@ -217,13 +207,23 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 	}
 }
 
-func (s *Screen) RedrawHandler(updates ...[]interface{}) {
-	if len(updates) == 0 {
+func (s *Screen) redrawFinalize(curFlush int) {
+	<-time.After(time.Millisecond * 5)
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if s.flushCount != curFlush {
 		return
 	}
 
+	if err := s.flush(true); err != nil {
+		log.Println("Couldn't flush data:", err)
+	}
+}
+
+func (s *Screen) RedrawHandler(updates ...[]interface{}) {
 	s.mu.Lock()
-	defer s.mu.Unlock()
+	s.flushCount++
 
 oploop:
 	for _, args := range updates {
@@ -248,9 +248,10 @@ oploop:
 		}
 	}
 
-	if err := s.flush(); err != nil {
+	s.flushScreen(false)
+	if err := s.flush(false); err != nil {
 		log.Println("Couldn't flush data:", err)
 	}
-
-	// s.dump()
+	s.mu.Unlock()
+	go s.redrawFinalize(s.flushCount)
 }

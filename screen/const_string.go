@@ -55,7 +55,8 @@ const (
 	_Mode_name_1 = "ModeNormal"
 	_Mode_name_2 = "ModeInsert"
 	_Mode_name_3 = "ModeReplace"
-	_Mode_name_4 = "ModeEnd"
+	_Mode_name_4 = "ModeRedraw"
+	_Mode_name_5 = "ModeEnd"
 )
 
 var (
@@ -63,7 +64,8 @@ var (
 	_Mode_index_1 = [...]uint8{0, 10}
 	_Mode_index_2 = [...]uint8{0, 10}
 	_Mode_index_3 = [...]uint8{0, 11}
-	_Mode_index_4 = [...]uint8{0, 7}
+	_Mode_index_4 = [...]uint8{0, 10}
+	_Mode_index_5 = [...]uint8{0, 7}
 )
 
 func (i Mode) String() string {
@@ -79,6 +81,8 @@ func (i Mode) String() string {
 		return _Mode_name_3
 	case i == 32:
 		return _Mode_name_4
+	case i == 64:
+		return _Mode_name_5
 	default:
 		return fmt.Sprintf("Mode(%d)", i)
 	}

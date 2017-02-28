@@ -19,6 +19,7 @@ type CellAttrs struct {
 
 type Cell struct {
 	Char rune
+	Sent bool
 	*CellAttrs
 }
 
@@ -68,17 +69,13 @@ type Screen struct {
 
 	attrID uint32
 
+	flushCount int
+
 	// Region to scroll.
 	scroll ScrollRegion
 
 	// The rendered screen.
 	Buffer []Cell
-
-	// Tracks ranges of characters being set.
-	charUpdate Vector2
-
-	// Whether or not to track characters being set.
-	charTracking bool
 
 	// The position of a clear operation in the output buffer.  This allows for
 	// the palette to be injected right after.
@@ -95,7 +92,6 @@ func NewScreen(w, h int) *Screen {
 
 	s := &Screen{
 		lastCursorIndex: -1,
-		charUpdate:      Vector2{0, -1},
 		DefaultAttrs:    attrs,
 		CurAttrs:        attrs,
 		attrCounter:     make(map[*CellAttrs]int),
@@ -116,36 +112,38 @@ func (s *Screen) SetSink(w io.Writer) {
 	defer s.mu.Unlock()
 
 	// XXX: Need to investigate the command line prompt blocking screen updates.
-	s.flush()
 	s.sink = w
-
 	s.writeSize()
 	s.writeClear()
+	s.flushScreen(true)
+	s.flush(true)
+}
 
-	lastIndex := 0
-	s.nextAttrs = s.Buffer[0].CellAttrs
+func (s *Screen) flushScreen(all bool) {
+	prev := -1
+	var attrs *CellAttrs
 
 	for i, c := range s.Buffer {
-		if c.CellAttrs != s.nextAttrs {
-			s.writeRange(lastIndex, i)
-			lastIndex = i
-			s.nextAttrs = c.CellAttrs
+		if all || !c.Sent {
+			if prev == -1 {
+				prev = i
+				attrs = c.CellAttrs
+			} else if attrs != c.CellAttrs {
+				s.writeRange(prev, i)
+				prev = i
+				attrs = c.CellAttrs
+			}
+		} else {
+			if prev != -1 {
+				s.writeRange(prev, i)
+				prev = -1
+				attrs = nil
+			}
 		}
 	}
 
-	if lastIndex < len(s.Buffer) {
-		s.writeRange(lastIndex, len(s.Buffer))
-	}
-	s.nextAttrs = s.CurAttrs
-
-	s.flush()
-}
-
-func (s *Screen) flushPutOps() {
-	if s.charUpdate.X >= 0 && s.charUpdate.Y >= 0 && s.charUpdate.Y-s.charUpdate.X > 0 {
-		s.writeRange(s.charUpdate.X, s.charUpdate.Y)
-		s.charUpdate.X = s.charUpdate.Y
-		s.charUpdate.Y = -1
+	if prev != -1 {
+		s.writeRange(prev, len(s.Buffer))
 	}
 }
 
@@ -162,34 +160,22 @@ func (s *Screen) setCellAttrs(index int, attrs *CellAttrs) {
 
 // clearLine is a helper for clearing a line.
 func (s *Screen) clearLine(x, y int) {
-	s.flushPutOps()
-
 	i1 := y*s.Size.X + x
 	i2 := i1 + (s.Size.X - x)
 
 	for i := i1; i < i2; i++ {
 		s.Buffer[i].Char = ' '
-		s.setCellAttrs(i, s.CurAttrs)
+		s.Buffer[i].Sent = false
+		s.setCellAttrs(i, s.DefaultAttrs)
 	}
-
-	s.writeRange(i1, i2)
 }
 
 func (s *Screen) setCursor(x, y int) {
 	s.Cursor.X = x
 	s.Cursor.Y = y
 
-	prevIndex := s.lastCursorIndex
 	index := y*s.Size.X + x
 	s.lastCursorIndex = index
-	if prevIndex != -1 && index-prevIndex == 1 {
-		s.charUpdate.Y++
-		return
-	}
-
-	s.flushPutOps()
-	s.charUpdate.X = index
-	s.charUpdate.Y = -1
 }
 
 // setChar sets a Cell's character, attributes, and colors.  It also updates the
@@ -197,19 +183,24 @@ func (s *Screen) setCursor(x, y int) {
 // operations.
 func (s *Screen) setChar(index int, c rune) {
 	s.Buffer[index].Char = c
+	s.Buffer[index].Sent = false
 	s.setCellAttrs(index, s.CurAttrs)
 
 	var w = runewidth.RuneWidth(c)
 	if w == 2 {
 		s.Buffer[index+1].Char = ' '
+		s.Buffer[index+1].Sent = false
 		s.setCellAttrs(index+1, s.CurAttrs)
 	}
 	index += w
-	if s.charTracking {
-		s.charUpdate.Y = index
-	}
 	s.Cursor.X = index % s.Size.X
 	s.Cursor.Y = index / s.Size.X
+}
+
+func (s *Screen) clearScreen() {
+	for i := 0; i < len(s.Buffer); i++ {
+		s.setChar(i, ' ')
+	}
 }
 
 // setSize sets the Buffer's size.
@@ -229,20 +220,18 @@ func (s *Screen) setSize(w, h int) {
 		buf := make([]Cell, newSize)
 		copy(buf, s.Buffer)
 		s.Buffer = buf
-
-		for i := curSize; i < newSize; i++ {
-			s.setChar(i, ' ')
-		}
+		// for i := curSize; i < newSize; i++ {
+		// 	s.setChar(i, ' ')
+		// }
 	}
-
-	s.charUpdate.X = 0
-	s.charUpdate.Y = -1
 
 	// Reset the scroll region on resize.
 	s.scroll.tl.X = 0
 	s.scroll.tl.Y = 0
 	s.scroll.br.X = s.Size.X - 1
 	s.scroll.br.Y = s.Size.Y - 1
+
+	s.clearScreen()
 }
 
 func (s *Screen) dump() {
