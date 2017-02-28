@@ -1,4 +1,4 @@
-# nmux
+<h1 align=center><img alt="nmux" src="assets/logo.png"></h1>
 
 `nmux` is a multiplexer for [Neovim][] processes.  It is very much a work in
 progress at the moment.
@@ -10,11 +10,17 @@ rendered in a browser: https://youtu.be/mzfHBPHkT-E
 The browser client was made mainly for prototyping.  Native GUI clients for
 Linux, macOS, and Windows are being worked on.
 
+## Requirements
+
+[Neovim][] must be installed and `nvim` available in `$PATH`.
+
+
 ## Install
 
-Pre-built binaries will be made available once development has reached a certain
-point.  However, if you want to try the browser client now, you will need
-make sure `nvim` is available in `$PATH`, then run:
+There is an [unstable][] Darwin (macOS) binary available.
+Windows and Linux builds will be available in the future.
+
+You can also install it with Go:
 
 ```
 $ go get -u github.com/tweekmonster/nmux/cmd/nmux
@@ -22,21 +28,36 @@ $ go get -u github.com/tweekmonster/nmux/cmd/nmux
 
 ## Usage
 
+To run the server:
+
 ```
-$ nmux --addr localhost:9999
+$ nmux --server --addr localhost:9999
 ```
 
-Then point your browser to [http://localhost:9999/](http://localhost:9999/)
+To use Neovim in a browser, go to
+[http://localhost:9999/](http://localhost:9999/)
 
-**Note**:  The browser client has been tested and works in Google Chrome.  The
-keyboard currently doesn't work in Firefox or Safari.
+**Note**: The browser client has been tested and works in Google Chrome.  The
+keyboard currently doesn't work in Firefox or Safari.  If you're using an
+extension that gives you vi functionality, it will need to be disabled.
+
+If you're using the Darwin release:
+
+```
+$ nmux.app/Contents/MacOS/nmux --server --addr localhost:9999
+```
+
+Then run `nmux.app` to connect to the server.  If you're using a port other
+than `9999`, you will need to run the client the same way, but without the
+`--server` flag.  A future release will allow you to configure a remote server
+and optionally spawn a local server.
 
 
 ## Goals
 
 - A server that manages multiple `nvim` processes.
   - Allow clients to connect over TCP.
-  - Shared unnamed buffer between all `nvim` processes.
+  - Shared unnamed register between all `nvim` processes.
 - Native cross-platform client programs.
   - Each `nvim` instance can be a tab or a split view.
   - UI is always consistent.  No platform-specific GUI elements, except for the
@@ -60,4 +81,5 @@ workspaces and resume where you left off after a reboot.
 
 
 [Neovim]: https://github.com/neovim/neovim
+[unstable]: https://github.com/tweekmonster/nmux/releases/tag/unstable
 [libvterm]: https://github.com/neovim/libvterm
