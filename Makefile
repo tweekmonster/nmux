@@ -1,20 +1,38 @@
-DIST = $(PWD)/dist
-GO_VERSION = 1.7.1
-SOURCES = $(shell find . \( -path './.git*' -o -path './vendor' \) \
-					-prune -o -type f -name '*.go' -print)
-XGO_TARGETS := linux/amd64 darwin/amd64 windows/amd64
-XGO_BUILD_TARGETS := $(foreach t,$(XGO_TARGETS),$(DIST)/$(shell echo "$(t)" \
-	| sed 's!\(.*\)/\(.*\)!\2/\1!')/nmux)
-XGO_BUILD_TARGETS := $(foreach t,$(XGO_BUILD_TARGETS), \
-	$(shell echo "$(t)" | sed 's!.*windows.*!&.exe!'))
+DIST := dist
+GO_VERSION := 1.8
+SOURCES := \
+	$(shell find . \( -path './.git*' -o -path './vendor' -o -path '$(DIST)' \) \
+	-prune -o -type f -name '*.go' -print)
+BINDATA = $(shell find data -type f)
 ADDR := "127.0.0.1:9999"
 
-.PHONY: all clean generate run-server run-gui
+# args: BUILD_BIN PLATFORM ARCHITECTURE ARCHIVE_SUFFIX
+define build_target
 
-all: $(DIST) generate $(XGO_BUILD_TARGETS)
+all: $(1) $(DIST)/$(2)-$(3).$(4)
+archive: $(DIST)/$(2)-$(3).$(4)
+.PHONY: $(2)
+
+$(2): $(1)
+
+$(1): $$(SOURCES)
+	@scripts/build.sh $$(DIST) $(2) $(3)
+
+$(DIST)/$(2)-$(3).$(4): $(1)
+	@scripts/archive.sh $$< $$@
+
+endef
+
+.PHONY: all clean archive .generated run-server run-gui
+
+all: $(DIST) .generated
 
 clean:
 	rm -rf $(DIST)
+	rm -f bindata.go screen/const_string.go
+
+$(DIST):
+	mkdir -p $@
 
 run-gui: $(DIST)
 	go build -o $(DIST)/nmux-client ./cmd/nmux
@@ -25,21 +43,19 @@ run-server: $(DIST)
 	go build -o $(DIST)/nmux-server ./cmd/nmux
 	@# Running from /tmp until I can figure out why prompts causes the API to
 	@# become unresponsive.
-	-cd /tmp && $(DIST)/nmux-server --server --addr="$(ADDR)"
+	@# @-cd /tmp && $(DIST)/nmux-server --server --addr="$(ADDR)"
+	-$(DIST)/nmux-server --server --addr="$(ADDR)"
 	rm $(DIST)/nmux-server
 
-generate:
-	go generate
+.generated: bindata.go screen/const_string.go
 
-$(XGO_BUILD_TARGETS): $(SOURCES)
-	$(eval t := $(wordlist 2,3,$(subst /, ,$@)))
-	$(eval target := $(word 2,$(t))/$(word 1,$(t)))
-	mkdir -p "$(@D)"
-	mkdir -p --mode=2775 "$(@D)/tmp"
-	xgo -go $(GO_VERSION) --targets="$(target)" -dest "$(@D)/tmp" ./cmd/nmux
-	cp "$(@D)/tmp/nmux"* "$@"
-	rm -rf "$(@D)/tmp"
-	touch "$@"
+bindata.go: $(BINDATA)
+	go-bindata ${BIN_DATA_ARGS} -pkg=nmux -prefix data/ data/...
 
-$(DIST):
-	mkdir -p $@
+screen/const_string.go: screen/const.go
+	stringer -type=Op,Attr,Mode -output screen/const_string.go screen/
+
+$(eval $(call build_target,$(DIST)/darwin-10.8/amd64/nmux.app/Contents/MacOS/nmux,darwin-10.8,amd64,tar.bz2))
+# $(eval $(call build_target,$(DIST)/linux/amd64/nmux,linux,amd64,tar.bz2))
+# $(eval $(call build_target,$(DIST)/windows/amd64/nmux.exe,windows,amd64,zip))
+# $(eval $(call build_target,$(DIST)/windows/386/nmux.exe,windows,386,zip))
