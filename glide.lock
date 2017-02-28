@@ -1,14 +1,16 @@
 hash: 4818c5b0a6793a83364866b68bdbe89a12a7a6edd300d842886ed55ef088242f
-updated: 2016-12-21T00:55:48.942140865-05:00
+updated: 2017-02-28T04:26:14.703642678Z
 imports:
 - name: github.com/fatih/color
-  version: dea9d3a26a087187530244679c1cfb3a42937794
+  version: 7824417a424b65227be8ac9b14d545a7f3e6c3f0
 - name: github.com/mattn/go-colorable
-  version: ed8eb9e318d7a84ce5915b495b7d35e0cfe7b5a8
+  version: 5411d3eea5978e6cdc258b30de592b60df6aba96
+  repo: https://github.com/mattn/go-colorable
 - name: github.com/mattn/go-isatty
-  version: 3a115632dcd687f9c8cd01679c83a06a0e21c1f3
+  version: dda3de49cbfcec471bd7a70e6cc01fcc3ff90109
+  repo: https://github.com/mattn/go-isatty
 - name: github.com/mattn/go-runewidth
-  version: d6bea18f789704b5f83375793155289da36a3c7f
+  version: 9e777a8366cce605130a531d2cd6363d07ad7317
 - name: github.com/neovim/go-client
   version: b4d0001757af5980b20bf246e900b9b0976a0a00
   subpackages:
@@ -16,11 +18,12 @@ imports:
   - msgpack/rpc
   - nvim
 - name: golang.org/x/net
-  version: 45e771701b814666a7eb299e6c7a57d0b1799e91
+  version: 906cda9512f77671ab44f8c8563b13a8e707b230
   subpackages:
   - websocket
 - name: golang.org/x/sys
-  version: d75a52659825e75fff6158388dddc6a5b04f9ba5
+  version: e24f485414aeafb646f6fca458b0bf869c0880a1
+  repo: https://go.googlesource.com/sys
   subpackages:
   - unix
 testImports: []
