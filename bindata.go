@@ -170,7 +170,7 @@ func webNmuxJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "web/nmux.js", size: 5766, mode: os.FileMode(420), modTime: time.Unix(1480575961, 0)}
+	info := bindataFileInfo{name: "web/nmux.js", size: 5766, mode: os.FileMode(436), modTime: time.Unix(1481005849, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
@@ -190,7 +190,7 @@ func webScreenJs() (*asset, error) {
 		return nil, err
 	}
 
-	info := bindataFileInfo{name: "web/screen.js", size: 12056, mode: os.FileMode(436), modTime: time.Unix(1480575960, 0)}
+	info := bindataFileInfo{name: "web/screen.js", size: 12056, mode: os.FileMode(436), modTime: time.Unix(1481321858, 0)}
 	a := &asset{bytes: bytes, info: info}
 	return a, nil
 }
