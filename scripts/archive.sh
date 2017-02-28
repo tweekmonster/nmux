@@ -6,6 +6,10 @@ set -e
 SOURCE=$1
 ARCHIVE=$2
 
+if [[ $SOURCE =~ "darwin" ]]; then
+  SOURCE="${SOURCE%.app*}.app"
+fi
+
 if [[ $ARCHIVE =~ \.zip$ ]]; then
   zip -j -r - "$SOURCE" > "$ARCHIVE"
 else
