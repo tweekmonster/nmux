@@ -23,12 +23,31 @@ var Screen = function() {
   var palette = {};
   var brush = {};
   var repeatCache = {};
+  var pixelRatio = window.devicePixelRatio || 1;
 
   // Global X coordinate for drawing undercurls whose ends meet regardless of
   // what canvs they're drawn on.
   var gX = 0;
 
   var grid = new Uint8Array(12);
+
+  function s(n) {
+    return n * pixelRatio;
+  }
+
+  function resizeCanvas(canvas, w, h) {
+    canvas.width = s(w);
+    canvas.height = s(h);
+    canvas.style.width = w + 'px';
+    canvas.style.height = h + 'px';
+  }
+
+  function moveCanvas(canvas, x, y, w, h) {
+    canvas.style.left = x + 'px';
+    canvas.style.top = y + 'px';
+    resizeCanvas(canvas, w, h);
+  }
+
 
   new (function() {
     var g = document.createElement('span');
@@ -37,8 +56,7 @@ var Screen = function() {
     g.style.verticalAlign = 'baseline';
     document.body.appendChild(g);
     var f = window.getComputedStyle(g);
-
-    font = f.fontSize + ' ' + f.fontFamily;
+    font = parseFloat(f.fontSize) + 'px ' + f.fontFamily;
 
     g.textContent = 'X';
     charW = g.offsetWidth;
@@ -100,9 +118,6 @@ var Screen = function() {
   var debugRects = [];
   var debug = null;
 
-  cursor.width = charW;
-  cursor.height = charH;
-
   var attachedEvents = [];
   self.addEventListener = function(name, handler, capture) {
     if (attachedEvents.indexOf(name) !== -1) {
@@ -117,16 +132,14 @@ var Screen = function() {
   function scratch(w, h) {
     _scratchI++;
     var scr = _scratch[_scratchI % _scratch.length];
-    scr.width = w;
-    scr.height = h;
+    resizeCanvas(scr, w, h);
     return scr;
   }
 
   function scratchA(w, h) {
     _alphaScratchI++;
     var scr = _alphaScratch[_alphaScratchI % _alphaScratch.length];
-    scr.width = w;
-    scr.height = h;
+    resizeCanvas(scr, w, h);
     return scr;
   }
 
@@ -143,12 +156,11 @@ var Screen = function() {
       return;
     }
 
-    buffer.width = main.width = w * charW;
-    buffer.height = main.height = h * charH;
+    resizeCanvas(main, w * charW, h * charH);
+    resizeCanvas(buffer, w * charW, h * charH);
 
     if (debug) {
-      debug.width = buffer.width;
-      debug.height = buffer.height;
+      resizeCanvas(debug, w * charW, h * charH);
     }
 
     gridW = w;
@@ -161,8 +173,10 @@ var Screen = function() {
     brush = {};
     self.setPalette(id, a, fg, bg, sp);
     self.setAttributes(id);
+    buffer.ctx.save();
     buffer.ctx.fillStyle = brush.bg;
     buffer.ctx.fillRect(0, 0, buffer.width, buffer.height);
+    buffer.ctx.restore();
 
     if (debug) {
       debug.width = debug.width;
@@ -238,6 +252,7 @@ var Screen = function() {
 
   function renderUndercurl(ctx, x, y, w, fg, bg, sp) {
     ctx.save();
+    ctx.scale(pixelRatio, pixelRatio);
     ctx.translate(0, -1);
     ctx.fillStyle = sp || brush.sp;
 
@@ -252,6 +267,7 @@ var Screen = function() {
 
   function renderUnderline(ctx, x, y, w, fg, bg, sp) {
     ctx.save();
+    ctx.scale(pixelRatio, pixelRatio);
     ctx.translate(0, charLH + 1);
     ctx.fillStyle = fg || brush.fg;
     ctx.fillRect(x, y, w, 1);
@@ -272,6 +288,7 @@ var Screen = function() {
 
   function renderChar(ctx, x, y, c, a, fg, bg, sp) {
     ctx.save();
+    ctx.scale(pixelRatio, pixelRatio);
     ctx.translate(x, y);
 
     ctx.fillStyle = bg;
@@ -280,7 +297,6 @@ var Screen = function() {
     ctx.translate(0, charOffsetY - 2);
     ctx.fillStyle = fg;
     setFont(ctx, a);
-
     ctx.fillText(c, 0, 0);
 
     ctx.restore();
@@ -299,14 +315,16 @@ var Screen = function() {
     if (!pat) {
       var scr = scratch(cw, charH);
       renderChar(scr.ctx, 0, 0, c, brush.attr, brush.fg, brush.bg, brush.sp);
-      debugRect(x, y, cw, charH, 0);
+      debug && debugRect(x, y, cw, charH, 0);
       pat = scr.ctx.createPattern(scr, 'repeat');
       repeatCache[k] = pat;
     }
 
-    debugRect(x, y, w, charH, 1);
+    debug && debugRect(x, y, w, charH, 1);
+    buffer.ctx.save();
     buffer.ctx.fillStyle = pat;
-    buffer.ctx.fillRect(x, y, w, charH);
+    buffer.ctx.fillRect(s(x), s(y), s(w), s(charH));
+    buffer.ctx.restore();
 
     renderAttrs(buffer.ctx, x, y, w);
   };
@@ -316,7 +334,7 @@ var Screen = function() {
     var y = Math.floor(index / gridW) * charH;
     var w = str.length * charW;
 
-    debugRect(x, y, w, charH, 2);
+    debug && debugRect(x, y, w, charH, 2);
 
     gX = x;
 
@@ -325,6 +343,7 @@ var Screen = function() {
     var scr = scratch(w, charH);
 
     scr.ctx.save();
+    scr.ctx.scale(pixelRatio, pixelRatio);
     scr.ctx.fillStyle = brush.bg;
     scr.ctx.fillRect(0, 0, w, charH);
 
@@ -343,7 +362,7 @@ var Screen = function() {
 
     renderAttrs(scr.ctx, 0, 0, w);
 
-    buffer.ctx.drawImage(scr, x, y);
+    buffer.ctx.drawImage(scr, s(x), s(y));
   };
 
   var cursorDelay = 1000;
@@ -382,9 +401,7 @@ var Screen = function() {
     c = String.fromCharCode(c);
     var cw = charW * c.wcwidth();
     gX = x * charW;
-    cursor.width = cw;
-    cursor.style.left = gX + 'px';
-    cursor.style.top = (y * charH) + 'px';
+    moveCanvas(cursor, gX, y * charH, cw, charH);
 
     var a = b.attr;
     var fg = b.fg;
@@ -411,6 +428,9 @@ var Screen = function() {
     renderChar(cursor.ctx, 0, 0, c, a, fg, bg, sp);
     renderAttrs(cursor.ctx, 0, 0, cw, a, fg, bg, sp);
 
+    cursor.ctx.save();
+    cursor.ctx.scale(pixelRatio, pixelRatio);
+
     if ((mode & nmux.ModeInsert) === nmux.ModeInsert) {
       cursor.ctx.fillStyle = fg;
       cursor.ctx.fillRect(0, 0, 1, charH);
@@ -418,18 +438,22 @@ var Screen = function() {
       cursor.ctx.fillStyle = fg;
       cursor.ctx.fillRect(0, charH - 3, cw, 3);
     }
+
+    cursor.ctx.restore();
   };
 
   self.scroll = function(bg, delta, x1, y1, x2, y2) {
     self.hideCursor();
 
-    var w = ((x2 - x1) + 1) * charW;
-    var h = ((y2 - y1) + 1) * charH;
-    delta *= charH;
-    x1 *= charW;
-    y1 *= charH;
+    var cw = ((x2 - x1) + 1) * charW;
+    var ch = ((y2 - y1) + 1) * charH;
+    var w = s(cw);
+    var h = s(ch);
+    delta *= s(charH);
+    x1 *= s(charW);
+    y1 *= s(charH);
 
-    var scr = scratch(w, h);
+    var scr = scratch(cw, ch);
     bg = bg_rgb(bg);
 
     scr.ctx.fillStyle = bg;
@@ -438,7 +462,7 @@ var Screen = function() {
 
     if (debug) {
       debugDraw();
-      var ascr = scratchA(w, h);
+      var ascr = scratchA(cw, ch);
       ascr.ctx.drawImage(debug, x1, y1, w, h, 0, -delta, w, h);
       debug.ctx.clearRect(x1, y1, w, h);
       debug.ctx.drawImage(ascr, x1, y1);
@@ -458,15 +482,15 @@ var Screen = function() {
       }
 
       debug = createCanvas(true, {'zIndex': 3, 'pointerEvents': 'none'}, true);
-      debug.width = buffer.width;
-      debug.height = buffer.height;
+      resizeCanvas(debug, gridW * charW, gridH * charH);
 
       var msg = 'Debug Enabled';
       debug.ctx.save();
+      debug.ctx.scale(pixelRatio, pixelRatio);
       setFont(debug.ctx, 0);
 
       var w = msg.length * charW;
-      debug.ctx.translate(debug.width - w - (charW * 4), charH);
+      debug.ctx.translate((gridW * charW) - w - (charW * 4), charH);
       debug.ctx.fillStyle = '#fff';
       debug.ctx.fillRect(0, 0, w + (charW * 4), charH * 3);
 
@@ -499,6 +523,7 @@ var Screen = function() {
       r = debugRects.pop();
       c = debugColors[r[4]];
       ctx.save();
+      ctx.scale(pixelRatio, pixelRatio);
       ctx.lineWidth = 1;
       ctx.strokeStyle = c[0];
       ctx.fillStyle = c[1];

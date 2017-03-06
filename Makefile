@@ -39,7 +39,7 @@ run-gui: $(DIST)
 	-$(DIST)/nmux-client --addr="$(ADDR)"
 	rm $(DIST)/nmux-client
 
-run-server: $(DIST)
+run-server: $(DIST) .generated $(SOURCES)
 	go build -o $(DIST)/nmux-server ./cmd/nmux
 	@# Running from /tmp until I can figure out why prompts causes the API to
 	@# become unresponsive.
