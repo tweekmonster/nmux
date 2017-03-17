@@ -2,7 +2,7 @@ DIST := dist
 GO_VERSION := 1.8
 SOURCES := \
 	$(shell find . \( -path './.git*' -o -path './vendor' -o -path '$(DIST)' \) \
-	-prune -o -type f -name '*.go' -print)
+	-prune -o -type f \( -name '*.go' -o -name '*.m' -o -name '*.h' \) -print)
 BINDATA = $(shell find data -type f)
 ADDR := "127.0.0.1:9999"
 

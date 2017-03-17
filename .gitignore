@@ -1,3 +1,3 @@
 /vendor/**
-/gui/nmux.xcodeproj
+/gui/nmux_darwin/nmux.xcodeproj
 /tags

@@ -1,10 +1,9 @@
 package gui
 
 /*
-#cgo CFLAGS: -x objective-c -mmacosx-version-min=10.8 -D__MAC_OS_X_VERSION_MAX_ALLOWED=1080 -D NMUX_CGO
-#cgo LDFLAGS: -framework Cocoa -framework AppKit
+#import <stdint.h>
 
-#import <Cocoa/Cocoa.h>
+typedef unsigned short unichar;
 
 void startApp();
 void stopApp();
@@ -168,20 +167,20 @@ func inputEvent(id uintptr, key *C.char) {
 }
 
 //export winMoved
-func winMoved(id uintptr, x, y int) {
+func winMoved(id uintptr, x, y C.int) {
 	sendWindowEvent(id, MoveEvent{
-		X: x,
-		Y: y,
+		X: int(x),
+		Y: int(y),
 	})
 }
 
 //export winResized
-func winResized(id uintptr, w, h, gw, gh int) {
+func winResized(id uintptr, w, h, gw, gh C.int) {
 	sendWindowEvent(id, ResizeEvent{
-		Width:      w,
-		Height:     h,
-		GridWidth:  gw,
-		GridHeight: gh,
+		Width:      int(w),
+		Height:     int(h),
+		GridWidth:  int(gw),
+		GridHeight: int(gh),
 	})
 }
 
