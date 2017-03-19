@@ -27,7 +27,6 @@
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
-		E06D26221E7B80E500EB4D99 /* app.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = app.m; sourceTree = "<group>"; };
 		E06D26231E7B80E500EB4D99 /* bridge.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = bridge.h; sourceTree = "<group>"; };
 		E06D26241E7B80E500EB4D99 /* bridge.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = bridge.m; sourceTree = "<group>"; };
 		E06D26251E7B80E500EB4D99 /* cgo_extern.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = cgo_extern.h; sourceTree = "<group>"; };
@@ -57,7 +56,6 @@
 		E0FAC88C1DF5042100CCB0E7 = {
 			isa = PBXGroup;
 			children = (
-				E06D26221E7B80E500EB4D99 /* app.m */,
 				E06D26231E7B80E500EB4D99 /* bridge.h */,
 				E06D26241E7B80E500EB4D99 /* bridge.m */,
 				E06D26251E7B80E500EB4D99 /* cgo_extern.h */,

@@ -343,7 +343,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (NSPoint)mouseCoords {
   NSPoint coords = [[self window] mouseLocationOutsideOfEventStream];
-  NSSize cellSize = [nmux cellSize];
+  CGSize cellSize = nmux_CellSize();
   coords.x = floor(coords.x / cellSize.width);
   coords.y = floor((NSHeight([self bounds]) - coords.y) / cellSize.height);
   return coords;
@@ -427,7 +427,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (void)setGridSize:(NSSize)size {
   _grid = size;
-  NSSize frameSize = NSSizeMultiply(size, [nmux cellSize]);
+  CGSize cellSize = nmux_CellSize();
+  NSSize frameSize = NSSizeMultiply(size, cellSize);
   NSRect winFrame = [[self window] frameRectForContentRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
   winFrame.origin = [[self window] frame].origin;
   [[self window] setDelegate:nil];
@@ -439,7 +440,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
   cursorTransform = CGAffineTransformMakeScale(1, -1);
   cursorTransform = CGAffineTransformTranslate(cursorTransform, 0,
-                                               -[nmux cellSize].height);
+                                               -cellSize.height);
 
   [drawLock lock];
   [self lockFocus];
@@ -452,12 +453,12 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   screenLayer = newLayer;
 
   if (cursorLayer == NULL) {
-    cursorLayer = CGLayerCreateWithContext(ctx, [nmux cellSize], NULL);
+    cursorLayer = CGLayerCreateWithContext(ctx, cellSize, NULL);
   } else {
     CGSize cursorSize = CGLayerGetSize(cursorLayer);
-    if (!CGSizeEqualToSize(cursorSize, [nmux cellSize])) {
+    if (!CGSizeEqualToSize(cursorSize, cellSize)) {
       CGLayerRelease(cursorLayer);
-      cursorLayer = CGLayerCreateWithContext(ctx, [nmux cellSize], NULL);
+      cursorLayer = CGLayerCreateWithContext(ctx, cellSize, NULL);
     }
   }
 
@@ -487,10 +488,11 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
 
   [[op text] getCharacters:runChars range:NSMakeRange(0, runLength)];
-  NSSize cellSize = [nmux cellSize];
-  CGFloat descent = [nmux descent];
+  NSSize cellSize = nmux_CellSize();
+  CGFloat descent = nmux_FontDescent(nil);
+  NSFont *font = nmux_CurrentFont();
 
-  CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], runChars,
+  CTFontGetGlyphsForCharacters((CTFontRef)font, runChars,
                                runGlyphs, runLength);
 
   for (size_t i = 0; i < runLength; i++) {
@@ -501,10 +503,10 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
   CGPoint o = rect.origin;
-  o.x += [nmux firstCharPos];
+  o.x += nmux_InitialCharPos(font);
   o.y += descent;
   CGContextTranslateCTM(ctx, o.x, o.y);
-  CTFontDrawGlyphs((CTFontRef)[nmux font], runGlyphs, runPositions, runLength, ctx);
+  CTFontDrawGlyphs((CTFontRef)font, runGlyphs, runPositions, runLength, ctx);
   CGContextTranslateCTM(ctx, -o.x, -o.y);
   CGContextRestoreGState(ctx);
 }
@@ -528,7 +530,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)scrollInContext:(CGContextRef)ctx op:(ScrollOp *)op rect:(CGRect)rect {
-  CGFloat offset = [op delta] * [nmux cellSize].height;
+  CGSize cellSize = nmux_CellSize();
+  CGFloat offset = [op delta] * cellSize.height;
   CGRect clip = rect;
   clip.origin.y += offset;
   clip.size.height -= ABS(offset);
@@ -631,13 +634,13 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
     NSString *cursorChar = [NSString stringWithCharacters:&character length:1];
     DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String] x:0 y:0 attrs:attrs];
-    CGSize cellSize = [nmux cellSize];
+    CGSize cellSize = nmux_CellSize();
     CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
                               (cursorPos.y ) * cellSize.height);
     CGRect rect = CGRectApplyAffineTransform([op dirtyRect], cursorTransform);
     [self drawTextContext:ctx op:op rect:rect];
     cursorRect.origin = pos;
-    cursorRect.size = [nmux cellSize];
+    cursorRect.size = cellSize;
     cursorRect = CGRectApplyAffineTransform(cursorRect, transform);
     [self setNeedsDisplayInRect:cursorRect];
 
@@ -652,9 +655,10 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 #pragma mark - Window Delegate
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize {
+  CGSize cellSize = nmux_CellSize();
   NSRect contentFrame = [sender contentRectForFrameRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
-  NSSize minSize = NSSizeMultiply([nmux minGridSize], [nmux cellSize]);
-  NSSize newSize = [nmux fitGrid:contentFrame.size];
+  NSSize minSize = NSSizeMultiply(nmux_MinGridSize(), cellSize);
+  NSSize newSize = nmux_FitToGrid(contentFrame.size);
 
   if (newSize.width < minSize.width) {
     newSize.width = minSize.width;
@@ -670,24 +674,25 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (void)windowDidMove:(NSNotification *)notification {
   NSRect frame = [[self window] frame];
-  [nmux setLastWinFrame:frame];
+  nmux_SetLastWindowFrame(frame);
   winMoved((uintptr_t)self, (int)NSMinX(frame), (int)NSMinY(frame));
 }
 
 - (void)windowDidResize:(NSNotification *)notification {
   NSRect frame = [self bounds];
-  [nmux setLastWinFrame:frame];
-  NSSize newGrid = NSSizeDivide(frame.size, [nmux cellSize]);
+  nmux_SetLastWindowFrame(frame);
+  CGSize cellSize = nmux_CellSize();
+  NSSize newGrid = NSSizeDivide(frame.size, cellSize);
   winResized((uintptr_t)self, (int)NSWidth(frame), (int)NSHeight(frame),
              (int)newGrid.width, (int)newGrid.height);
 #ifndef NMUX_CGO
-  [self setGridSize:NSSizeDivide([self bounds].size, [nmux cellSize])];
+  [self setGridSize:NSSizeDivide([self bounds].size, nmux_CellSize())];
   spam(self);
 #endif
 }
 
 - (void)windowDidBecomeKey:(NSNotification *)notification {
-  [nmux setLastWinFrame:[[self window] frame]];
+  nmux_SetLastWindowFrame([[self window] frame]);
   winFocused((uintptr_t)self);
 }
 

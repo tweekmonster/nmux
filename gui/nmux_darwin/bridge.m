@@ -45,7 +45,7 @@ void startApp() {
     NSMenu *menubar = create_app_menu();
     [NSApp setMainMenu:menubar];
 
-    [nmux setup];
+    nmux_Init();
 
     AppDelegate* delegate = [[[AppDelegate alloc] init] autorelease];
     [NSApp setDelegate:delegate];
@@ -71,8 +71,8 @@ uintptr_t newWindow(int width, int height) {
     style |= NSClosableWindowMask;
 
     NSSize winGrid = NSMakeSize(width, height);
-    NSSize minGrid = [nmux minGridSize];
-    NSRect rect = [nmux lastWinFrame];
+    NSSize minGrid = nmux_MinGridSize();
+    NSRect rect = nmux_LastWindowFrame();
 
     if (width == 0) {
       winGrid.width = (int)minGrid.width;
@@ -82,7 +82,7 @@ uintptr_t newWindow(int width, int height) {
       winGrid.height = (int)minGrid.height;
     }
 
-    rect.size = NSSizeMultiply(winGrid, [nmux cellSize]);
+    rect.size = NSSizeMultiply(winGrid, nmux_CellSize());
 
     NSWindow *window = [[NSWindow alloc]
                         initWithContentRect:rect
@@ -201,7 +201,7 @@ void flush(uintptr_t view, int mode, int x, int y, unichar character,
 }
 
 void getCellSize(int *x, int *y) {
-  NSSize cellSize = [nmux cellSize];
+  NSSize cellSize = nmux_CellSize();
   *x = (int)cellSize.width;
   *y = (int)cellSize.height;
 }

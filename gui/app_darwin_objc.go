@@ -16,6 +16,10 @@ package gui
 #cgo CFLAGS: -x objective-c -D NMUX_CGO -mmacosx-version-min=10.8 -D__MAC_OS_X_VERSION_MAX_ALLOWED=1080
 #cgo LDFLAGS: -framework Cocoa -framework AppKit
 
-#import "nmux_darwin/app.m"
+#import "nmux_darwin/bridge.m"
+#import "nmux_darwin/ops.m"
+#import "nmux_darwin/nmux.m"
+#import "nmux_darwin/delegate.m"
+#import "nmux_darwin/screen.m"
 */
 import "C"

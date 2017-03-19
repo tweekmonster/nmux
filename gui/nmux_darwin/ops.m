@@ -6,7 +6,7 @@
 
 - (void)setDirtyX:(int)x y:(int)y w:(int)w h:(int)h {
   _bounds = NSMakeRect(x, y, w, h);
-  NSSize cellSize = [nmux cellSize];
+  NSSize cellSize = nmux_CellSize();
   _dirtyRect.origin.x = (CGFloat)x * cellSize.width;
   _dirtyRect.origin.y = (CGFloat)y * cellSize.height;
   _dirtyRect.size.width = (CGFloat)w * cellSize.width;
@@ -56,20 +56,23 @@ static TextPattern *firstPattern = NULL;
 // This is used for pattern fills in drawRect:
 static inline void drawTextPattern(void *info, CGContextRef ctx) {
   TextPattern *tp = (TextPattern *)info;
-  CGRect bounds = CGRectMake(0, 0, [nmux cellSize].width,
-                             [nmux cellSize].height);
+  CGSize cellSize = nmux_CellSize();
+  CGRect bounds = CGRectMake(0, 0, cellSize.width,
+                             cellSize.height);
   CGContextSetFillColorWithColor(ctx, CGRGB(tp->attrs.bg));
   CGContextFillRect(ctx, bounds);
 
   if (tp->c != ' ') {
     CGGlyph glyphs;
-    CGPoint positions = CGPointMake([nmux firstCharPos], [nmux descent]);
+    NSFont *font = nmux_CurrentFont();
+    CGPoint positions = CGPointMake(nmux_InitialCharPos(font),
+                                    nmux_FontDescent(font));
     unichar c = tp->c;
-    CTFontGetGlyphsForCharacters((CTFontRef)[nmux font], &c, &glyphs, 1);
+    CTFontGetGlyphsForCharacters((CTFontRef)font, &c, &glyphs, 1);
 
     CGContextSetFillColorWithColor(ctx, CGRGB(tp->attrs.fg));
     CGContextSetTextDrawingMode(ctx, kCGTextFill);
-    CTFontDrawGlyphs((CTFontRef)[nmux font], &glyphs, &positions, 1, ctx);
+    CTFontDrawGlyphs((CTFontRef)font, &glyphs, &positions, 1, ctx);
   }
 }
 
@@ -109,7 +112,7 @@ CGPatternRef getTextPatternLayer(TextPattern tp) {
   cb.version = 0;
 
   CGRect bounds = CGRectZero;
-  bounds.size = [nmux cellSize];
+  bounds.size = nmux_CellSize();
   np->pattern = CGPatternCreate((void *)np, bounds, CGAffineTransformIdentity,
                                 bounds.size.width, bounds.size.height,
                                 kCGPatternTilingConstantSpacing, YES, &cb);
@@ -172,4 +175,4 @@ void textPatternClear() {
 
 @end
 
-/* vim: set ft=objc ts=2 sw=2 et :*/
+// vim: set ft=objc ts=2 sw=2 et :

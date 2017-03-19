@@ -1,21 +1,50 @@
 #import "nmux.h"
 
-static NSFont *font;
-static NSSize cellSize;
-static NSSize minGridSize = {80, 20};
-static NSRect lastWinFrame;
+static NSFont *_currentFont;
+static NSMutableArray *_fontCache;
+static CGSize _cellSize;
+static CGSize _minGridSize = {80, 20};
+static NSRect _lastWinFrame;
 
-@implementation nmux
 
-+ (void)setup {
-  [self setFontFamily:nil size:0];
+void nmux_Init() {
+  _fontCache = [[NSMutableArray alloc] init];
+  nmux_SetFont(nil, 0);
 }
 
-+ (void)setFontFamily:(NSString *)name size:(CGFloat)size {
+CGSize nmux_CellSize() {
+  return _cellSize;
+}
+
+CGSize nmux_MinGridSize() {
+  return _minGridSize;
+}
+
+CGSize nmux_FitToGrid(CGSize size) {
+  size.width -= fmod(size.width, _cellSize.width);
+  size.height -= fmod(size.height, _cellSize.height);
+  return size;
+}
+
+NSRect nmux_LastWindowFrame() {
+  if (NSEqualRects(_lastWinFrame, NSZeroRect)) {
+    _lastWinFrame.size = NSSizeMultiply(_minGridSize, _cellSize);
+    NSRect screenRect = [[NSScreen mainScreen] visibleFrame];
+    _lastWinFrame.origin.x = 0;
+    _lastWinFrame.origin.y = NSHeight(screenRect) - NSHeight(_lastWinFrame);
+  }
+  return _lastWinFrame;
+}
+
+void nmux_SetLastWindowFrame(NSRect frame) {
+  _lastWinFrame = frame;
+}
+
+void nmux_SetFont(NSString *name, CGFloat size) {
   NSFont *f;
 
-  if (name == nil && font != nil) {
-    name = [font familyName];
+  if (name == nil && _currentFont != nil) {
+    name = [_currentFont familyName];
   }
 
   if (name == nil) {
@@ -28,63 +57,35 @@ static NSRect lastWinFrame;
                    size:size];
   }
 
-  cellSize.width = ceil([f maximumAdvancement].width);
-  cellSize.height = ceil([f ascender] + ABS([f descender]));
+  _cellSize.width = ceil([f maximumAdvancement].width);
+  _cellSize.height = ceil([f ascender] + ABS([f descender]));
 
-  if (font != nil) {
-    [font release];
+  if (_currentFont != nil) {
+    [_currentFont release];
   }
-  font = [f retain];
+  _currentFont = [f retain];
 }
 
-+ (NSFont *)font {
-  return font;
+NSFont *nmux_CurrentFont() {
+  if (_currentFont == nil) {
+    nmux_SetFont(nil, 0);
+  }
+  return _currentFont;
 }
 
-+ (CGFloat)descent {
+CGFloat nmux_FontDescent(NSFont *font) {
+  if (font == nil) {
+    font = nmux_CurrentFont();
+  }
+
   return ABS([font descender]);
 }
 
-+ (CGFloat)firstCharPos {
-  return (cellSize.width - [font maximumAdvancement].width) / 2;
-}
-
-+ (NSSize)cellSize {
-  return cellSize;
-}
-
-+ (NSSize)minGridSize {
-  return minGridSize;
-}
-
-+ (void)setLastWinFrame:(NSRect)frame {
-  lastWinFrame = frame;
-}
-
-+ (NSRect)lastWinFrame {
-  if (NSEqualRects(lastWinFrame, NSZeroRect)) {
-    lastWinFrame.size = NSSizeMultiply(minGridSize, cellSize);
-    NSRect screenRect = [[NSScreen mainScreen] visibleFrame];
-    lastWinFrame.origin.x = 0;
-    lastWinFrame.origin.y = NSHeight(screenRect) - NSHeight(lastWinFrame);
+CGFloat nmux_InitialCharPos(NSFont *font) {
+  if (font == nil) {
+    font = nmux_CurrentFont();
   }
-  return lastWinFrame;
+  return (_cellSize.width - [font maximumAdvancement].width) / 2;
 }
-
-+ (NSSize)fitGrid:(NSSize)size {
-  size.width -= fmod(size.width, cellSize.width);
-  size.height -= fmod(size.height, cellSize.height);
-  return size;
-}
-
-- (void)dealloc {
-  if (font != nil) {
-    [font release];
-  }
-
-  [super dealloc];
-}
-
-@end
 
 /* vim: set ft=objc ts=2 sw=2 et :*/
