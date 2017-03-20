@@ -1,5 +1,7 @@
 package screen
 
+import runewidth "github.com/mattn/go-runewidth"
+
 // TODO: There should be a buffer that's managed elsewhere that this can
 // unconditionally write to.
 
@@ -211,7 +213,9 @@ func (s *Screen) writeFlush(displayCursor bool) {
 	}
 	c := s.Buffer[i]
 
-	p.WriteEncodedInts(int(state), s.Cursor.X, s.Cursor.Y, int(c.id), int(c.Char))
+	p.WriteEncodedInts(int(state), s.Cursor.X, s.Cursor.Y, int(c.id))
+	p.WriteRuneRun([]rune{c.Char})
+	p.WriteEncodedInt(runewidth.RuneWidth(c.Char))
 }
 
 // Flush operations into the sink.

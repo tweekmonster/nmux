@@ -286,13 +286,17 @@ var Screen = function() {
     }
   }
 
-  function renderChar(ctx, x, y, c, a, fg, bg, sp) {
+  function renderChar(ctx, x, y, c, a, fg, bg, sp, w) {
     ctx.save();
     ctx.scale(pixelRatio, pixelRatio);
     ctx.translate(x, y);
 
+    if (!w) {
+      w = 1;
+    }
+
     ctx.fillStyle = bg;
-    ctx.fillRect(0, 0, charW * c.wcwidth(), charH);
+    ctx.fillRect(0, 0, charW * w, charH);
 
     ctx.translate(0, charOffsetY - 2);
     ctx.fillStyle = fg;
@@ -307,7 +311,7 @@ var Screen = function() {
     var y = Math.floor(index / gridW) * charH;
     var k = c + brush.fg + brush.bg + brush.sp;
     var pat = repeatCache[k];
-    var cw = charW * c.wcwidth();
+    var cw = charW;
     var w = len * cw;
 
     gX = x;
@@ -332,7 +336,17 @@ var Screen = function() {
   self.renderText = function(index, str) {
     var x = (index % gridW) * charW;
     var y = Math.floor(index / gridW) * charH;
-    var w = str.length * charW;
+    var c, chars = [], l = 0;
+
+    // Get unicode characters from the string.
+    // TODO: This doesn't have broad support in browsers and will need to be
+    // revisited.
+    for (c of str) {
+      chars.push(c);
+      l++;
+    }
+
+    var w = l * charW;
 
     debug && debugRect(x, y, w, charH, 2);
 
@@ -350,9 +364,8 @@ var Screen = function() {
     setFont(scr.ctx, brush.attr);
     scr.ctx.translate(0, charOffsetY - 2);
     scr.ctx.fillStyle = brush.fg;
-
-    for (var c, i = 0, l = str.length; i < l; i++) {
-      c = str.substr(i, 1);
+    for (var i = 0; i < l; i++) {
+      c = chars[i];
       if (c != ' ') {
         scr.ctx.fillText(c, i * charW, 0);
       }
@@ -392,14 +405,13 @@ var Screen = function() {
     nmux.animate.add('cursor', blinkCursor, 500, cursorDelay);
   };
 
-  self.setCursor = function(mode, x, y, id, c) {
+  self.setCursor = function(mode, x, y, id, c, w) {
     var b = palette[id];
     if (!b) {
       return;
     }
 
-    c = String.fromCharCode(c);
-    var cw = charW * c.wcwidth();
+    var cw = charW * w;
     gX = x * charW;
     moveCanvas(cursor, gX, y * charH, cw, charH);
 
@@ -425,7 +437,7 @@ var Screen = function() {
       cursorDelay = 500;
     }
 
-    renderChar(cursor.ctx, 0, 0, c, a, fg, bg, sp);
+    renderChar(cursor.ctx, 0, 0, c, a, fg, bg, sp, w);
     renderAttrs(cursor.ctx, 0, 0, cw, a, fg, bg, sp);
 
     cursor.ctx.save();

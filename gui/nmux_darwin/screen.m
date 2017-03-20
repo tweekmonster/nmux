@@ -3,7 +3,6 @@
 #import "nmux.h"
 #import "text.h"
 #import "cgo_extern.h"
-#import "wcwidth.c"
 
 static inline NSMutableString * mouse_name(NSEvent *event) {
   NSString *name;
@@ -517,7 +516,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   CGContextRestoreGState(ctx);
 }
 
-- (void)drawTextPatternInContext:(CGContextRef)ctx op:(DrawRepeatedTextOp *)op rect:(CGRect)rect {
+- (void)drawTextPatternInContext:(CGContextRef)ctx op:(DrawRepeatedTextOp *)op
+                            rect:(CGRect)rect {
   TextPattern tp;
   tp.c = [op character];
   tp.attrs = [op attrs];
@@ -569,7 +569,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
   if (screenLayer != NULL) {
     CGSize screenSize = CGLayerGetSize(screenLayer);
-    CGContextDrawLayerAtPoint(ctx, CGPointMake(0, NSHeight([self bounds]) - screenSize.height), screenLayer);
+    CGFloat y = NSHeight([self bounds]) - screenSize.height;
+    CGContextDrawLayerAtPoint(ctx, CGPointMake(0, y), screenLayer);
   }
 
   if (cursorLayer != NULL) {
@@ -595,7 +596,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   return display;
 }
 
-- (void)flushDrawOps:(unichar)character pos:(NSPoint)cursorPos attrs:(TextAttr)attrs {
+- (void)flushDrawOps:(const char *)character charWidth:(int)width
+                 pos:(NSPoint)cursorPos attrs:(TextAttr)attrs {
   [drawLock lock];
 
   CGContextRef ctx = CGLayerGetContext(screenLayer);
@@ -633,13 +635,13 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
 
   if (cursorUpdate) {
-    NSString *cursorChar = [NSString stringWithCharacters:&character length:1];
-    DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String] x:0 y:0 attrs:attrs];
+    NSString *cursorChar = [NSString stringWithUTF8String:character];
+    DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String]
+                                          x:0 y:0 attrs:attrs];
     CGSize cellSize = nmux_CellSize();
     CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
                               (cursorPos.y ) * cellSize.height);
     CGRect dirtyRect = [op dirtyRect];
-    int width = mk_wcwidth(character);
     if (width > 1) {
       cellSize.width *= width;
       dirtyRect.size.width *= width;
@@ -671,7 +673,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 #pragma mark - Window Delegate
 - (NSSize)windowWillResize:(NSWindow *)sender toSize:(NSSize)frameSize {
   CGSize cellSize = nmux_CellSize();
-  NSRect contentFrame = [sender contentRectForFrameRect:NSMakeRect(0, 0, frameSize.width, frameSize.height)];
+  NSRect contentFrame = [sender contentRectForFrameRect:
+                         NSMakeRect(0, 0, frameSize.width, frameSize.height)];
   NSSize minSize = NSSizeMultiply(nmux_MinGridSize(), cellSize);
   NSSize newSize = nmux_FitToGrid(contentFrame.size);
 

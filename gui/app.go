@@ -16,7 +16,7 @@ type Window interface {
 	SetGrid(cols, rows int) error
 	Scroll(delta, top, bottom, left, right int, bg screen.Color) error
 	Clear(bg screen.Color) error
-	Flush(mode int, character rune, cursor screen.Vector2, attrs screen.CellAttrs) error
+	Flush(mode int, character string, width int, cursor screen.Vector2, attrs screen.CellAttrs) error
 	Close() error
 	SendEvent(interface{})
 	NextEvent() interface{}

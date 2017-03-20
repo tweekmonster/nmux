@@ -15,7 +15,7 @@ void drawText(uintptr_t, const char *, int, int, uint8_t, int32_t, int32_t, int3
 void drawRepeatedText(uintptr_t, unichar, int, int, uint8_t, int32_t, int32_t, int32_t);
 void clearScreen(uintptr_t, int32_t);
 void scrollScreen(uintptr_t, int, int, int, int, int, int32_t);
-void flush(uintptr_t, int, int, int, unichar, uint8_t, int32_t, int32_t, int32_t);
+void flush(uintptr_t, int, int, int, const char *, int, uint8_t, int32_t, int32_t, int32_t);
 void getCellSize(int*, int*);
 #endif /* ifndef BRIDGE_H */
 

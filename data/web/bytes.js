@@ -73,7 +73,7 @@ var Reader = function(bytes) {
     var len = self.eint32();
     var out = '';
     while (len--) {
-      out += String.fromCharCode(self.eint32());
+      out += String.fromCodePoint(self.eint32());
     }
     return out;
   }

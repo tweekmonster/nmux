@@ -150,9 +150,10 @@ new (function() {
           var cx = buf.eint32();
           var cy = buf.eint32();
           var id = buf.eint32();
-          var c = buf.eint32();
+          var c = buf.string();
+          var w = buf.eint32();
 
-          scr.setCursor(mode, cx, cy, id, c);
+          scr.setCursor(mode, cx, cy, id, c, w);
           scr.showCursor();
           break;
 

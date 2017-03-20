@@ -180,8 +180,8 @@ void clearScreen(uintptr_t view, int32_t bg) {
   });
 }
 
-void flush(uintptr_t view, int mode, int x, int y, unichar character,
-           uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
+void flush(uintptr_t view, int mode, int x, int y, const char *character,
+           int width, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
   DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     [screen setState:(Mode)mode];
@@ -196,7 +196,7 @@ void flush(uintptr_t view, int mode, int x, int y, unichar character,
     NSPoint pos;
     pos.x = x;
     pos.y = y;
-    [screen flushDrawOps:character pos:pos attrs:ta];
+    [screen flushDrawOps:character charWidth:width pos:pos attrs:ta];
   });
 }
 
@@ -265,7 +265,7 @@ void spam(NmuxScreen *view) {
   ta.fg = 0;
   ta.bg = 0;
   ta.sp = 0;
-  [view flushDrawOps:'X' pos:NSMakePoint(0, 0) attrs:ta];
+  [view flushDrawOps:"X" charWidth:1 pos:NSMakePoint(0, 0) attrs:ta];
 }
 
 int main(int argc, char *argv[]) {

@@ -203,9 +203,10 @@ func (c *Client) parseOps(r *StreamReader) {
 			cursorX := r.ReadEint32()
 			cursorY := r.ReadEint32()
 			id := r.ReadEint32()
-			char := r.ReadEint32()
+			char := r.ReadString()
+			width := r.ReadEint32()
 
-			win.Flush(mode, rune(char), screen.Vector2{X: cursorX, Y: cursorY}, c.palette[id])
+			win.Flush(mode, char, width, screen.Vector2{X: cursorX, Y: cursorY}, c.palette[id])
 
 		case screen.OpLog:
 			util.Print("[Server Log]", r.ReadString())

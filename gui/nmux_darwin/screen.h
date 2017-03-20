@@ -32,7 +32,8 @@
 
 - (void)setGridSize:(NSSize)size;
 - (void)addDrawOp:(DrawOp *)op;
-- (void)flushDrawOps:(unichar)character pos:(NSPoint)cursorPos attrs:(TextAttr)attrs;
+- (void)flushDrawOps:(const char *)character charWidth:(int)width
+                 pos:(NSPoint)cursorPos attrs:(TextAttr)attrs;
 @end
 #endif /* ifndef SCREEN_H */
 

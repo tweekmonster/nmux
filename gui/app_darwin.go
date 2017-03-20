@@ -13,7 +13,7 @@ void drawText(uintptr_t, const char *, int, int, uint8_t, int32_t, int32_t, int3
 void drawRepeatedText(uintptr_t, unichar, int, int, uint8_t, int32_t, int32_t, int32_t);
 void clearScreen(uintptr_t, int32_t);
 void scrollScreen(uintptr_t, int, int, int, int, int, int32_t);
-void flush(uintptr_t, int, int, int, unichar, uint8_t, int32_t, int32_t, int32_t);
+void flush(uintptr_t, int, int, int, const char *, int, uint8_t, int32_t, int32_t, int32_t);
 void getCellSize(int*, int*);
 */
 import "C"
@@ -92,7 +92,7 @@ func (w *window) Clear(bg screen.Color) error {
 	return nil
 }
 
-func (w *window) Flush(mode int, character rune, cursor screen.Vector2, attrs screen.CellAttrs) error {
+func (w *window) Flush(mode int, character string, width int, cursor screen.Vector2, attrs screen.CellAttrs) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	fg := C.int32_t(attrs.Fg)
@@ -100,7 +100,8 @@ func (w *window) Flush(mode int, character rune, cursor screen.Vector2, attrs sc
 	if attrs.Attrs&screen.AttrReverse != 0 {
 		fg, bg = bg, fg
 	}
-	C.flush(C.uintptr_t(w.id), C.int(mode), C.int(cursor.X), C.int(cursor.Y), C.unichar(character), C.uint8_t(attrs.Attrs), bg, fg, C.int32_t(attrs.Sp))
+	cbytes := []byte(character)
+	C.flush(C.uintptr_t(w.id), C.int(mode), C.int(cursor.X), C.int(cursor.Y), (*C.char)(unsafe.Pointer(&cbytes[0])), C.int(width), C.uint8_t(attrs.Attrs), bg, fg, C.int32_t(attrs.Sp))
 	return nil
 }
 
