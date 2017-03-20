@@ -1,3 +1,5 @@
+// +build darwin
+
 package gui
 
 // This allows us to split objc sources into smaller files.  Since app_darwin.go
