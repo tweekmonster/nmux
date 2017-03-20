@@ -24,6 +24,7 @@ var Screen = function() {
   var brush = {};
   var repeatCache = {};
   var pixelRatio = window.devicePixelRatio || 1;
+  var state = 0;
 
   // Global X coordinate for drawing undercurls whose ends meet regardless of
   // what canvs they're drawn on.
@@ -394,6 +395,10 @@ var Screen = function() {
   };
 
   self.showCursor = function() {
+    if ((state & nmux.ModeBusy) == nmux.ModeBusy) {
+      cursor.style.visibility = 'hidden';
+      return;
+    }
     cursor.style.visibility = 'visible';
 
     switch (self.mouse.event) {
@@ -451,6 +456,7 @@ var Screen = function() {
       cursor.ctx.fillRect(0, charH - 3, cw, 3);
     }
 
+    state = mode;
     cursor.ctx.restore();
   };
 

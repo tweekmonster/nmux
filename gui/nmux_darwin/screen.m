@@ -573,7 +573,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
     CGContextDrawLayerAtPoint(ctx, CGPointMake(0, y), screenLayer);
   }
 
-  if (cursorLayer != NULL) {
+  if (cursorLayer != NULL && ([self state] & ModeBusy) != ModeBusy) {
     CGContextDrawLayerAtPoint(ctx, cursorRect.origin, cursorLayer);
   }
 
