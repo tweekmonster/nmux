@@ -1,11 +1,7 @@
 #ifndef OPS_H
 #define OPS_H
 #import <Cocoa/Cocoa.h>
-#import "misc.h"
 #import "nmux.h"
-
-void textPatternClear(void);
-CGPatternRef getTextPatternLayer(TextPattern tp);
 
 @interface DrawOp : NSObject
 {

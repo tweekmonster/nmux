@@ -213,8 +213,10 @@ void spam(NmuxScreen *view) {
 
 #define rand_color() (int32_t)arc4random_uniform(0xffffff)
 
-  const char *message = {"Hello, World!"};
-  int message_len = (int)strlen(message);
+  NSString *message = @"Emoji 👍 test 💩 Test String™ beep boop 🤖";
+  const char *messageChars = [message UTF8String];
+  int message_width = (int)[message length];
+  int message_len = (int)[message lengthOfBytesUsingEncoding:NSUTF8StringEncoding];
 
   int y = 0;
   int p = 0x112233, b, ci = 0;
@@ -231,29 +233,30 @@ void spam(NmuxScreen *view) {
     c = (unichar)'A' + (ci % 26);
     ci++;
     i1 = y * mx;
-    drawText((uintptr_t)view, message, message_len, i1, 0,
+    drawText((uintptr_t)view, messageChars, message_len, i1, 0,
              p, b, rand_color());
-    i2 = i1 + ((mx - message_len) / 2);
+    i2 = i1 + ((mx - message_width) / 2);
+    i1 += message_width;
 
     p = nextp();
     b = 0xffffff - p;
-    drawRepeatedText((uintptr_t)view, c, i2 - i1, i1 + message_len, 0, p, b, p);
+    drawRepeatedText((uintptr_t)view, c, i2 - i1 - 2, i1 + 1, 0, p, b, p);
 
     p = nextp();
     b = 0xffffff - p;
-    drawText((uintptr_t)view, message, message_len, i2, 0, p, b, p);
+    drawText((uintptr_t)view, messageChars, message_len, i2, 0, p, b, p);
 
     c = (unichar)'A' + (ci % 26);
     ci++;
-    i1 = i2 + message_len;
-    i2 = (y * mx + mx) - message_len;
+    i1 = i2 + message_width;
+    i2 = (y * mx + mx) - message_width;
     p = nextp();
     b = 0xffffff - p;
-    drawRepeatedText((uintptr_t)view, c, i2 - i1, i1, 0, p, b, p);
+    drawRepeatedText((uintptr_t)view, c, i2 - i1 - 2, i1 + 1, 0, p, b, p);
 
     p = nextp();
     b = 0xffffff - p;
-    drawText((uintptr_t)view, message, message_len, i2, 0, p, b, p);
+    drawText((uintptr_t)view, messageChars, message_len, i2, 0, p, b, p);
     y++;
   }
 

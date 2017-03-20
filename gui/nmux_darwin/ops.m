@@ -21,6 +21,8 @@
                      attrs:(TextAttr)attrs {
   DrawTextOp *op = [[DrawTextOp alloc] init];
   NSString *str = [NSString stringWithUTF8String:text];
+  // Note: The width is not based on character sizes since nvim takes care of
+  // character width spacing.
   [op setText:str];
   [op setAttrs:attrs];
   [op setDirtyX:x y:y w:(int)[str length] h:1];
@@ -38,9 +40,6 @@
 
 
 #pragma mark - DrawRepeatedTextOp
-
-static TextPattern *firstPattern = NULL;
-
 @implementation DrawRepeatedTextOp
 + (DrawRepeatedTextOp *)opWithCharacter:(unichar)c length:(int)length x:(int)x
                                       y:(int)y attrs:(TextAttr)attrs {
@@ -52,89 +51,9 @@ static TextPattern *firstPattern = NULL;
   return [op autorelease];
 }
 
-
-// This is used for pattern fills in drawRect:
-static inline void drawTextPattern(void *info, CGContextRef ctx) {
-  TextPattern *tp = (TextPattern *)info;
-  CGSize cellSize = nmux_CellSize();
-  CGRect bounds = CGRectMake(0, 0, cellSize.width,
-                             cellSize.height);
-  CGContextSetFillColorWithColor(ctx, CGRGB(tp->attrs.bg));
-  CGContextFillRect(ctx, bounds);
-
-  if (tp->c != ' ') {
-    CGGlyph glyphs;
-    NSFont *font = nmux_CurrentFont();
-    CGPoint positions = CGPointMake(nmux_InitialCharPos(font),
-                                    nmux_FontDescent(font));
-    unichar c = tp->c;
-    CTFontGetGlyphsForCharacters((CTFontRef)font, &c, &glyphs, 1);
-
-    CGContextSetFillColorWithColor(ctx, CGRGB(tp->attrs.fg));
-    CGContextSetTextDrawingMode(ctx, kCGTextFill);
-    CTFontDrawGlyphs((CTFontRef)font, &glyphs, &positions, 1, ctx);
-  }
-}
-
-
-static void patternReleaseCallback(void *info) {}
-
-
-CGPatternRef getTextPatternLayer(TextPattern tp) {
-  TextPattern *p = firstPattern;
-  TextPattern *last = NULL;
-  TextAttr pt;
-
-  while(p != NULL) {
-    last = p;
-    pt = p->attrs;
-    if (p->c == tp.c && pt.attrs == tp.attrs.attrs && pt.bg == tp.attrs.bg
-        && pt.fg == tp.attrs.fg && pt.sp == tp.attrs.sp) {
-      return p->pattern;
-    }
-    p = p->next;
-  }
-
-  TextPattern *np = calloc(1, sizeof(TextPattern));
-  memcpy(np, &tp, sizeof(TextPattern));
-  np->pattern = NULL;
-  np->next = NULL;
-
-  if (last != NULL) {
-    last->next = np;
-  } else {
-    firstPattern = np;
-  }
-
-  CGPatternCallbacks cb;
-  cb.drawPattern = &drawTextPattern;
-  cb.releaseInfo = &patternReleaseCallback;
-  cb.version = 0;
-
-  CGRect bounds = CGRectZero;
-  bounds.size = nmux_CellSize();
-  np->pattern = CGPatternCreate((void *)np, bounds, CGAffineTransformIdentity,
-                                bounds.size.width, bounds.size.height,
-                                kCGPatternTilingConstantSpacing, YES, &cb);
-  return np->pattern;
-}
-
-void textPatternClear() {
-  TextPattern *p = firstPattern;
-  TextPattern *n = NULL;
-
-  while(p != NULL) {
-    n = p->next;
-    p->next = NULL;
-    CGPatternRelease(p->pattern);
-    free(p);
-    p = n;
-  }
-
-  firstPattern = NULL;
-}
-
 @end
+
+
 #pragma mark - ClearOp
 @implementation ClearOp
 + (ClearOp *)opWithBg:(int32_t)bg {

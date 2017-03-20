@@ -18,6 +18,7 @@ package gui
 
 #import "nmux_darwin/bridge.m"
 #import "nmux_darwin/ops.m"
+#import "nmux_darwin/text.m"
 #import "nmux_darwin/nmux.m"
 #import "nmux_darwin/delegate.m"
 #import "nmux_darwin/screen.m"

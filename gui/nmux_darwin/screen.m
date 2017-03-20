@@ -1,8 +1,9 @@
 #import "screen.h"
 #import "bridge.h"
 #import "nmux.h"
-#import "misc.h"
+#import "text.h"
 #import "cgo_extern.h"
+#import "wcwidth.c"
 
 static inline NSMutableString * mouse_name(NSEvent *event) {
   NSString *name;
@@ -28,6 +29,9 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
   if (self = [super initWithFrame:frameRect]) {
+    runChars = NULL;
+    runGlyphs = NULL;
+    runPositions = NULL;
     drawLock = [NSLock new];
     [self setAutoresizingMask:NSViewWidthSizable|NSViewHeightSizable];
     flushOps = [NSMutableArray new];
@@ -425,6 +429,19 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 #pragma mark - Nmux Drawing
 
+- (void)resizeCursor:(NSSize)size {
+  CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
+  if (cursorLayer == NULL) {
+    cursorLayer = CGLayerCreateWithContext(ctx, size, NULL);
+  } else {
+    CGSize cursorSize = CGLayerGetSize(cursorLayer);
+    if (!CGSizeEqualToSize(cursorSize, size)) {
+      CGLayerRelease(cursorLayer);
+      cursorLayer = CGLayerCreateWithContext(ctx, size, NULL);
+    }
+  }
+}
+
 - (void)setGridSize:(NSSize)size {
   _grid = size;
   CGSize cellSize = nmux_CellSize();
@@ -452,15 +469,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
   screenLayer = newLayer;
 
-  if (cursorLayer == NULL) {
-    cursorLayer = CGLayerCreateWithContext(ctx, cellSize, NULL);
-  } else {
-    CGSize cursorSize = CGLayerGetSize(cursorLayer);
-    if (!CGSizeEqualToSize(cursorSize, cellSize)) {
-      CGLayerRelease(cursorLayer);
-      cursorLayer = CGLayerCreateWithContext(ctx, cellSize, NULL);
-    }
-  }
+  [self resizeCursor:cellSize];
 
   [self unlockFocus];
   [drawLock unlock];
@@ -490,10 +499,10 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   [[op text] getCharacters:runChars range:NSMakeRange(0, runLength)];
   NSSize cellSize = nmux_CellSize();
   CGFloat descent = nmux_FontDescent(nil);
-  NSFont *font = nmux_CurrentFont();
-
-  CTFontGetGlyphsForCharacters((CTFontRef)font, runChars,
-                               runGlyphs, runLength);
+  CTFontRef font = nmux_CurrentFont();
+  CGPoint o = rect.origin;
+  o.x += nmux_InitialCharPos(font);
+  o.y += descent;
 
   for (size_t i = 0; i < runLength; i++) {
     runPositions[i] = CGPointMake(i * cellSize.width, 0);
@@ -502,11 +511,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].fg));
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
-  CGPoint o = rect.origin;
-  o.x += nmux_InitialCharPos(font);
-  o.y += descent;
   CGContextTranslateCTM(ctx, o.x, o.y);
-  CTFontDrawGlyphs((CTFontRef)font, runGlyphs, runPositions, runLength, ctx);
+  drawTextInContext(ctx, font, runChars, runGlyphs, runPositions, runLength);
   CGContextTranslateCTM(ctx, -o.x, -o.y);
   CGContextRestoreGState(ctx);
 }
@@ -627,17 +633,26 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
 
   if (cursorUpdate) {
-    ctx = CGLayerGetContext(cursorLayer);
-    CGContextSaveGState(ctx);
-    CGContextSetShouldSubpixelPositionFonts(ctx, YES);
-    CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
-
     NSString *cursorChar = [NSString stringWithCharacters:&character length:1];
     DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String] x:0 y:0 attrs:attrs];
     CGSize cellSize = nmux_CellSize();
     CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
                               (cursorPos.y ) * cellSize.height);
-    CGRect rect = CGRectApplyAffineTransform([op dirtyRect], cursorTransform);
+    CGRect dirtyRect = [op dirtyRect];
+    int width = mk_wcwidth(character);
+    if (width > 1) {
+      cellSize.width *= width;
+      dirtyRect.size.width *= width;
+    }
+
+    [self resizeCursor:cellSize];
+
+    ctx = CGLayerGetContext(cursorLayer);
+    CGContextSaveGState(ctx);
+    CGContextSetShouldSubpixelPositionFonts(ctx, YES);
+    CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
+
+    CGRect rect = CGRectApplyAffineTransform(dirtyRect, cursorTransform);
     [self drawTextContext:ctx op:op rect:rect];
     cursorRect.origin = pos;
     cursorRect.size = cellSize;

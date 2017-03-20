@@ -12,6 +12,7 @@
 		E06D26321E7B80E500EB4D99 /* nmux.m in Sources */ = {isa = PBXBuildFile; fileRef = E06D262A1E7B80E500EB4D99 /* nmux.m */; };
 		E06D26331E7B80E500EB4D99 /* ops.m in Sources */ = {isa = PBXBuildFile; fileRef = E06D262C1E7B80E500EB4D99 /* ops.m */; };
 		E06D26341E7B80E500EB4D99 /* screen.m in Sources */ = {isa = PBXBuildFile; fileRef = E06D262E1E7B80E500EB4D99 /* screen.m */; };
+		E0BEE73D1E7EB951009BEC06 /* text.m in Sources */ = {isa = PBXBuildFile; fileRef = E0BEE73C1E7EB951009BEC06 /* text.m */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXCopyFilesBuildPhase section */
@@ -39,6 +40,8 @@
 		E06D262C1E7B80E500EB4D99 /* ops.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = ops.m; sourceTree = "<group>"; };
 		E06D262D1E7B80E500EB4D99 /* screen.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = screen.h; sourceTree = "<group>"; };
 		E06D262E1E7B80E500EB4D99 /* screen.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = screen.m; sourceTree = "<group>"; };
+		E0BEE73B1E7EB951009BEC06 /* text.h */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.h; path = text.h; sourceTree = "<group>"; };
+		E0BEE73C1E7EB951009BEC06 /* text.m */ = {isa = PBXFileReference; fileEncoding = 4; lastKnownFileType = sourcecode.c.objc; path = text.m; sourceTree = "<group>"; };
 		E0FAC8951DF5042100CCB0E7 /* nmux */ = {isa = PBXFileReference; explicitFileType = "compiled.mach-o.executable"; includeInIndex = 0; path = nmux; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -59,6 +62,8 @@
 				E06D26231E7B80E500EB4D99 /* bridge.h */,
 				E06D26241E7B80E500EB4D99 /* bridge.m */,
 				E06D26251E7B80E500EB4D99 /* cgo_extern.h */,
+				E0BEE73B1E7EB951009BEC06 /* text.h */,
+				E0BEE73C1E7EB951009BEC06 /* text.m */,
 				E06D26261E7B80E500EB4D99 /* delegate.h */,
 				E06D26271E7B80E500EB4D99 /* delegate.m */,
 				E06D26281E7B80E500EB4D99 /* misc.h */,
@@ -142,6 +147,7 @@
 				E06D26341E7B80E500EB4D99 /* screen.m in Sources */,
 				E06D26321E7B80E500EB4D99 /* nmux.m in Sources */,
 				E06D26311E7B80E500EB4D99 /* delegate.m in Sources */,
+				E0BEE73D1E7EB951009BEC06 /* text.m in Sources */,
 				E06D26331E7B80E500EB4D99 /* ops.m in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
