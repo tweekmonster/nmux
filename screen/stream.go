@@ -1,6 +1,10 @@
 package screen
 
-import runewidth "github.com/mattn/go-runewidth"
+import (
+	runewidth "github.com/mattn/go-runewidth"
+)
+
+const minRepeatRange = 3
 
 // TODO: There should be a buffer that's managed elsewhere that this can
 // unconditionally write to.
@@ -10,125 +14,65 @@ func (s *Screen) writeLog(message string) {
 	s.payload.WriteStringRun(message)
 }
 
+// writeRange sends a range of characters to render.  The ranges *must* have the
+// same display attributes.  Repeated characters will be sent as a "condensed"
+// operation.
 func (s *Screen) writeRange(i1, i2 int) {
 	run := make([]rune, 0, i2-i1)
-	p := s.payload
-	runStart := i1
-	repeated := 1
-	run = append(run, s.Buffer[i1].Char)
-	s.Buffer[i1].Sent = true
-
-	s.writeStyle(s.Buffer[i1].CellAttrs)
-
-	for i := i1 + 1; i < i2; i++ {
+	for i := i1; i < i2; i++ {
 		s.Buffer[i].Sent = true
-
-		if s.Buffer[i-1].Char != s.Buffer[i].Char {
-			if len(run) > 0 && repeated > 3 {
-				p.WriteOp(OpPutRep)
-				p.WriteEncodedInt(runStart)
-				p.WriteEncodedInt(repeated)
-				p.WriteEncodedInt(int(run[0]))
-				run = run[0:0]
-				runStart = i
-			}
-			repeated = 0
-			run = append(run, s.Buffer[i].Char)
-			continue
-		}
-
-		if len(run) > 0 && repeated == 0 {
-			p.WriteOp(OpPut)
-			p.WriteEncodedInt(runStart)
-			p.WriteRuneRun(run)
-			run = run[0:0]
-			runStart = i
-		}
-		repeated++
 		run = append(run, s.Buffer[i].Char)
 	}
 
-	if len(run) > 0 {
-		if repeated > 3 {
-			p.WriteOp(OpPutRep)
-			p.WriteEncodedInt(runStart)
-			p.WriteEncodedInt(repeated)
-			p.WriteEncodedInt(int(run[0]))
-		} else {
-			p.WriteOp(OpPut)
-			p.WriteEncodedInt(runStart)
-			p.WriteRuneRun(run)
-		}
-	}
-}
-
-// writeRange sends a range of characters to render.  The ranges *must* have the
-// same display attributes.  A run of the same character will be sent as a
-// "condensed" operation.
-func (s *Screen) writeRange2(i1, i2 int) {
-	run := make([]rune, 0, i2-i1)
-	runs := make([][2]int, 0, i2-i1)
-
-	firstC := s.Buffer[i1].Char
-	runStart := 0
-	runEnd := 0
-
-	s.writeStyle(s.Buffer[i1].CellAttrs)
-	s.nextAttrs = nil
-
-	for i, c := range s.Buffer[i1:i2] {
-		if c.Char == firstC {
-			runEnd++
-		} else {
-			runs = append(runs, [2]int{runStart, runEnd})
-			firstC = c.Char
-			runStart = i
-			runEnd = i + 1
-		}
-		run = append(run, c.Char)
-	}
-
-	if runEnd-runStart > 0 {
-		runs = append(runs, [2]int{runStart, runEnd})
-	}
-
-	send := make([]rune, i2-i1)
-	index := i1
-	length := 0
 	p := s.payload
+	runStart := 0
+	s.writeStyle(s.Buffer[i1].CellAttrs)
 
-	for _, r := range runs {
-		if r[1]-r[0] < 4 {
-			// Run is too short.
-			copy(send[length:], run[r[0]:r[1]])
-			length += r[1] - r[0]
-		} else {
-			if length > 0 {
-				// Flush pending characters.
-				p.WriteOp(OpPut)
-				p.WriteEncodedInt(index)
-				p.WriteRuneRun(send[:length])
-				index += length
+	if len(run) < minRepeatRange {
+		p.WriteOp(OpPut)
+		p.WriteEncodedInt(i1)
+		p.WriteRuneRun(run)
+		return
+	}
+
+	l := len(run)
+	i := 0
+outer:
+	for i < l-minRepeatRange {
+		for j := minRepeatRange - 1; j > 0; j-- {
+			if run[i] != run[i+j] {
+				i++
+				continue outer
 			}
+		}
 
-			// Getting here means that the run is long enough to send as a condensed
-			// render operation.
-			p.WriteOp(OpPutRep)
-			p.WriteEncodedInt(index)
-			p.WriteEncodedInt(r[1] - r[0])
-			p.WriteEncodedInt(int(run[r[0]]))
+		if i-runStart > 0 {
+			p.WriteOp(OpPut)
+			p.WriteEncodedInt(i1 + runStart)
+			p.WriteRuneRun(run[runStart:i])
+			runStart = i
+		}
 
-			index += r[1] - r[0]
-			length = 0
+	scan:
+		for j := i + minRepeatRange; j <= l; j++ {
+			if j == l || run[i] != run[j] {
+				p.WriteOp(OpPutRep)
+				p.WriteEncodedInt(i1 + runStart)
+				p.WriteEncodedInt(j - i)
+				p.WriteEncodedInt(int(run[i]))
+				runStart = j
+				i = j
+				break scan
+			}
 		}
 	}
 
-	if length > 0 {
+	run = run[runStart:]
+	if len(run) > 0 {
 		p.WriteOp(OpPut)
-		p.WriteEncodedInt(index)
-		p.WriteRuneRun(send[:length])
+		p.WriteEncodedInt(i1 + runStart)
+		p.WriteRuneRun(run)
 	}
-
 }
 
 func (s *Screen) writeScroll(delta int) {

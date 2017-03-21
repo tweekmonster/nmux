@@ -120,25 +120,26 @@ func (s *Screen) SetSink(w io.Writer) {
 }
 
 func (s *Screen) flushScreen(all bool) {
+	if all {
+		s.writeRange(0, len(s.Buffer))
+	}
+
 	prev := -1
 	var attrs *CellAttrs
 
 	for i, c := range s.Buffer {
 		if all || !c.Sent {
-			if prev == -1 {
-				prev = i
-				attrs = c.CellAttrs
-			} else if attrs != c.CellAttrs {
-				s.writeRange(prev, i)
+			if attrs != c.CellAttrs {
+				if prev != -1 {
+					s.writeRange(prev, i)
+				}
 				prev = i
 				attrs = c.CellAttrs
 			}
-		} else {
-			if prev != -1 {
-				s.writeRange(prev, i)
-				prev = -1
-				attrs = nil
-			}
+		} else if prev != -1 {
+			s.writeRange(prev, i)
+			prev = -1
+			attrs = nil
 		}
 	}
 
