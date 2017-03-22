@@ -484,7 +484,6 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {
   CGContextSaveGState(ctx);
-  CGContextClipToRect(ctx, rect);
   CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
   CGContextFillRect(ctx, rect);
 
@@ -578,11 +577,22 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   if (screenLayer != NULL) {
     CGSize screenSize = CGLayerGetSize(screenLayer);
     CGFloat y = NSHeight([self bounds]) - screenSize.height;
-    CGContextDrawLayerAtPoint(ctx, CGPointMake(0, y), screenLayer);
+    const NSRect *rects;
+    NSInteger count;
+    [self getRectsBeingDrawn:&rects count:&count];
+    while (count--) {
+      CGContextSaveGState(ctx);
+      CGContextClipToRect(ctx, rects[count]);
+      CGContextDrawLayerAtPoint(ctx, CGPointMake(0, y), screenLayer);
+      CGContextRestoreGState(ctx);
+    }
   }
 
   if (cursorLayer != NULL && ([self state] & ModeBusy) != ModeBusy) {
+    CGContextSaveGState(ctx);
+    CGContextClipToRect(ctx, cursorRect);
     CGContextDrawLayerAtPoint(ctx, cursorRect.origin, cursorLayer);
+    CGContextRestoreGState(ctx);
   }
 
   [super drawRect:dirtyRect];
@@ -619,7 +629,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
     }
 
     CGRect rect = CGRectApplyAffineTransform([op dirtyRect], transform);
-
+    CGContextSaveGState(ctx);
+    CGContextClipToRect(ctx, rect);
     if ([op isKindOfClass:[ClearOp class]]) {
       CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
       CGContextFillRect(ctx, rect);
@@ -632,6 +643,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
       [self scrollInContext:ctx op:(ScrollOp *)op rect:rect];
     }
 
+    CGContextRestoreGState(ctx);
     [self setNeedsDisplayInRect:rect];
   }
 
