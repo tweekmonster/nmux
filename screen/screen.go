@@ -164,11 +164,14 @@ func (s *Screen) clearLine(x, y int) {
 	i1 := y*s.Size.X + x
 	i2 := i1 + (s.Size.X - x)
 
+	cursor := s.Cursor
+	curAttrs := s.CurAttrs
+	s.CurAttrs = s.DefaultAttrs
 	for i := i1; i < i2; i++ {
-		s.Buffer[i].Char = ' '
-		s.Buffer[i].Sent = false
-		s.setCellAttrs(i, s.DefaultAttrs)
+		s.setChar(i, ' ')
 	}
+	s.Cursor = cursor
+	s.CurAttrs = curAttrs
 }
 
 func (s *Screen) setCursor(x, y int) {
@@ -183,16 +186,20 @@ func (s *Screen) setCursor(x, y int) {
 // cursor position and the range of cells to be included when flushing put
 // operations.
 func (s *Screen) setChar(index int, c rune) {
-	s.Buffer[index].Char = c
-	s.Buffer[index].Sent = false
-	s.setCellAttrs(index, s.CurAttrs)
-
 	var w = runewidth.RuneWidth(c)
-	if w == 2 {
-		s.Buffer[index+1].Char = ' '
-		s.Buffer[index+1].Sent = false
-		s.setCellAttrs(index+1, s.CurAttrs)
+
+	if s.Buffer[index].Char != c || s.Buffer[index].CellAttrs != s.CurAttrs {
+		s.Buffer[index].Char = c
+		s.Buffer[index].Sent = false
+		s.setCellAttrs(index, s.CurAttrs)
+
+		if w == 2 {
+			s.Buffer[index+1].Char = ' '
+			s.Buffer[index+1].Sent = false
+			s.setCellAttrs(index+1, s.CurAttrs)
+		}
 	}
+
 	index += w
 	s.Cursor.X = index % s.Size.X
 	s.Cursor.Y = index / s.Size.X
