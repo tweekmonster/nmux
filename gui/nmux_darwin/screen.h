@@ -21,6 +21,8 @@
   NSMutableArray *flushOps;
   NSLock *drawLock;
 
+  CGColorRef viewBg;
+
   unichar *runChars;
   CGGlyph *runGlyphs;
   CGPoint *runPositions;

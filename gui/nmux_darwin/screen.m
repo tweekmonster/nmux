@@ -28,6 +28,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (instancetype)initWithFrame:(NSRect)frameRect {
   if (self = [super initWithFrame:frameRect]) {
+    viewBg = NULL;
     runChars = NULL;
     runGlyphs = NULL;
     runPositions = NULL;
@@ -48,6 +49,10 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)dealloc {
+  if (viewBg != NULL) {
+    CFRelease(viewBg);
+  }
+
   if (runChars != NULL) {
     free(runChars);
   }
@@ -574,6 +579,11 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   [drawLock lock];
   CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
 
+  if (viewBg != NULL && NSEqualRects([self bounds], dirtyRect)) {
+    CGContextSetFillColorWithColor(ctx, viewBg);
+    CGContextFillRect(ctx, dirtyRect);
+  }
+
   if (screenLayer != NULL) {
     CGSize screenSize = CGLayerGetSize(screenLayer);
     CGFloat y = NSHeight([self bounds]) - screenSize.height;
@@ -602,6 +612,14 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
 - (void)addDrawOp:(id)op {
   [drawLock lock];
+  if ([op isKindOfClass:[ClearOp class]]) {
+    if (viewBg != NULL) {
+      CFRelease(viewBg);
+    }
+    viewBg = CGRGB([(ClearOp *)op attrs].bg);
+    CFRetain(viewBg);
+  }
+
   didFlush = NO;
   [flushOps addObject:op];
   [drawLock unlock];
