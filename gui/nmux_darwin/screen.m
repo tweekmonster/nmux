@@ -579,14 +579,23 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   [drawLock lock];
   CGContextRef ctx = [[NSGraphicsContext currentContext] graphicsPort];
 
-  if (viewBg != NULL && NSEqualRects([self bounds], dirtyRect)) {
-    CGContextSetFillColorWithColor(ctx, viewBg);
-    CGContextFillRect(ctx, dirtyRect);
-  }
+  CGRect newCursorRect = cursorRect;
 
   if (screenLayer != NULL) {
     CGSize screenSize = CGLayerGetSize(screenLayer);
     CGFloat y = NSHeight([self bounds]) - screenSize.height;
+
+    if (viewBg != NULL && [self inLiveResize]) {
+      newCursorRect.origin.y += y;
+
+      NSRect screenRect = NSZeroRect;
+      screenRect.size = screenSize;
+      if (!NSEqualRects([self bounds], screenRect)) {
+        CGContextSetFillColorWithColor(ctx, viewBg);
+        CGContextFillRect(ctx, dirtyRect);
+      }
+    }
+
     const NSRect *rects;
     NSInteger count;
     [self getRectsBeingDrawn:&rects count:&count];
@@ -600,8 +609,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
   if (cursorLayer != NULL && ([self state] & ModeBusy) != ModeBusy) {
     CGContextSaveGState(ctx);
-    CGContextClipToRect(ctx, cursorRect);
-    CGContextDrawLayerAtPoint(ctx, cursorRect.origin, cursorLayer);
+    CGContextClipToRect(ctx, newCursorRect);
+    CGContextDrawLayerAtPoint(ctx, newCursorRect.origin, cursorLayer);
     CGContextRestoreGState(ctx);
   }
 
