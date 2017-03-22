@@ -87,7 +87,7 @@ uintptr_t newWindow(int width, int height) {
     NSWindow *window = [[NSWindow alloc]
                         initWithContentRect:rect
                                   styleMask:style
-                                    backing:NSBackingStoreBuffered
+                                    backing:NSBackingStoreNonretained
                                       defer:NO];
     [window setTitle:@"nmux"];
     [window setDisplaysWhenScreenProfileChanges:YES];
