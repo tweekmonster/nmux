@@ -70,6 +70,14 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   return NO;
 }
 
+- (BOOL)isOpaque {
+  return YES;
+}
+
+- (BOOL)wantsDefaultClipping {
+  return NO;
+}
+
 #pragma mark - NSResponder
 - (void)keyDown:(NSEvent *)event {
   // We only care about the keyDown event.
