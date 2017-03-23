@@ -1,26 +1,24 @@
-hash: 4818c5b0a6793a83364866b68bdbe89a12a7a6edd300d842886ed55ef088242f
-updated: 2017-02-28T04:26:14.703642678Z
+hash: bdecf79b96b13d5875958d861f038fddc83c812b6bbdc52083e502e933f3d958
+updated: 2017-03-23T02:47:15.66923401Z
 imports:
 - name: github.com/fatih/color
-  version: 7824417a424b65227be8ac9b14d545a7f3e6c3f0
+  version: 9131ab34cf20d2f6d83fdc67168a5430d1c7dc23
+- name: github.com/gorilla/websocket
+  version: 3ab3a8b8831546bd18fd182c20687ca853b2bb13
 - name: github.com/mattn/go-colorable
   version: 5411d3eea5978e6cdc258b30de592b60df6aba96
   repo: https://github.com/mattn/go-colorable
 - name: github.com/mattn/go-isatty
-  version: dda3de49cbfcec471bd7a70e6cc01fcc3ff90109
+  version: 57fdcb988a5c543893cc61bce354a6e24ab70022
   repo: https://github.com/mattn/go-isatty
 - name: github.com/mattn/go-runewidth
   version: 9e777a8366cce605130a531d2cd6363d07ad7317
 - name: github.com/neovim/go-client
-  version: b4d0001757af5980b20bf246e900b9b0976a0a00
+  version: d752a44cdb9bb8dd85a3b50a2196937ec85a4582
   subpackages:
   - msgpack
   - msgpack/rpc
   - nvim
-- name: golang.org/x/net
-  version: 906cda9512f77671ab44f8c8563b13a8e707b230
-  subpackages:
-  - websocket
 - name: golang.org/x/sys
   version: e24f485414aeafb646f6fca458b0bf869c0880a1
   repo: https://go.googlesource.com/sys

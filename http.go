@@ -8,10 +8,9 @@ import (
 	"path/filepath"
 	"time"
 
+	"github.com/gorilla/websocket"
 	"github.com/tweekmonster/nmux/screen"
 	"github.com/tweekmonster/nmux/util"
-
-	"golang.org/x/net/websocket"
 )
 
 type tcpKeepAliveListener struct {
@@ -19,6 +18,24 @@ type tcpKeepAliveListener struct {
 }
 
 var proc *Process
+
+var upgrader = websocket.Upgrader{
+	ReadBufferSize:  1024,
+	WriteBufferSize: 1024,
+}
+
+type WebsocketWriter struct {
+	Conn *websocket.Conn
+}
+
+func (w WebsocketWriter) Write(p []byte) (int, error) {
+	err := w.Conn.WriteMessage(websocket.BinaryMessage, p)
+	if err == nil {
+		return len(p), nil
+	}
+
+	return 0, err
+}
 
 func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 	tc, err := ln.AcceptTCP()
@@ -32,7 +49,6 @@ func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
 
 func websocketHandler(ws *websocket.Conn) {
 	util.Print("Connection from:", ws.RemoteAddr())
-	ws.PayloadType = websocket.BinaryFrame
 
 	if proc == nil || !proc.IsRunning() {
 		util.Debug("Starting nvim process")
@@ -57,10 +73,14 @@ func websocketHandler(ws *websocket.Conn) {
 
 	go func() {
 		util.Debug("Starting input loop")
-		var msg []byte
 	loop:
 		for {
-			err := websocket.Message.Receive(ws, &msg)
+			msgType, data, err := ws.ReadMessage()
+			if msgType != websocket.BinaryMessage {
+				util.Print("Unsupported message type from client", ws.RemoteAddr(), msgType)
+				break loop
+			}
+
 			if err == io.EOF {
 				break loop
 			} else if err != nil {
@@ -68,7 +88,7 @@ func websocketHandler(ws *websocket.Conn) {
 				break loop
 			} else {
 				select {
-				case input <- msg:
+				case input <- data:
 				case <-time.After(time.Second):
 					// XXX: Needs investigation.  Occurs when a client reconnects and
 					// sends a key event while nvim is prompting in the command line.
@@ -79,11 +99,11 @@ func websocketHandler(ws *websocket.Conn) {
 			}
 		}
 
-		util.Print("Input stopped")
+		util.Print("Input stopped for client", ws.RemoteAddr())
 		closeInput()
 	}()
 
-	if err := proc.Attach(ws); err != nil {
+	if err := proc.Attach(WebsocketWriter{Conn: ws}); err != nil {
 		util.Print("Attach err:", err)
 	}
 
@@ -134,7 +154,16 @@ mainloop:
 }
 
 func WebServer(addr string) (io.Closer, error) {
-	http.Handle("/nmux", websocket.Handler(websocketHandler))
+	http.HandleFunc("/nmux", func(w http.ResponseWriter, r *http.Request) {
+		ws, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			util.Print("Couldn't upgrade connection for", r.RemoteAddr)
+			return
+		}
+
+		websocketHandler(ws)
+	})
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		log.Printf("%s - %s", r.Method, r.URL.Path)
 		switch r.URL.Path {

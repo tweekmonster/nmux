@@ -8,7 +8,7 @@ import (
 	screen "github.com/tweekmonster/nmux/screen"
 	"github.com/tweekmonster/nmux/util"
 
-	"golang.org/x/net/websocket"
+	"github.com/gorilla/websocket"
 )
 
 type Client struct {
@@ -44,9 +44,8 @@ func NewClient(addr string, app *App) (*Client, error) {
 }
 
 func (c *Client) Connect() error {
-	origin := fmt.Sprintf("http://%s/", c.Addr)
 	url := fmt.Sprintf("ws://%s/nmux", c.Addr)
-	conn, err := websocket.Dial(url, "", origin)
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		return err
 	}
@@ -81,7 +80,10 @@ loop:
 			payload[4] = uint8(size.Y & 0xff)
 
 			c.grid = size
-			websocket.Message.Send(c.Conn, payload[:])
+			if err := c.Conn.WriteMessage(websocket.BinaryMessage, payload[:]); err != nil {
+				util.Debug("Client write error:", err)
+				break loop
+			}
 
 			size, ok = <-c.resizeChan
 			if !ok {
@@ -218,15 +220,18 @@ func (c *Client) parseOps(r *StreamReader) {
 }
 
 func (c *Client) handleIncoming() {
-	var data []byte
-
 loop:
 	for {
-		err := websocket.Message.Receive(c.Conn, &data)
+		msgType, data, err := c.Conn.ReadMessage()
+		if msgType != websocket.BinaryMessage {
+			util.Print("Unsupported message type from server: %d", msgType)
+			break loop
+		}
+
 		if err == io.EOF {
 			break loop
 		} else if err != nil {
-			util.Debug("Recv err:", err)
+			util.Debug("Error reading message from server:", err)
 		} else {
 			// util.Print("Data:", data)
 			r := StreamReader{Data: data}
@@ -236,5 +241,6 @@ loop:
 }
 
 func (c *Client) SendInput(input string) {
-	websocket.Message.Send(c.Conn, append([]byte{byte(screen.OpKeyboard)}, []byte(input)...))
+	msg := append([]byte{byte(screen.OpKeyboard)}, []byte(input)...)
+	c.Conn.WriteMessage(websocket.BinaryMessage, msg)
 }
