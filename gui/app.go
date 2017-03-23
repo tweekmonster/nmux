@@ -17,6 +17,9 @@ type Window interface {
 	Scroll(delta, top, bottom, left, right int, bg screen.Color) error
 	Clear(bg screen.Color) error
 	Flush(mode int, character string, width int, cursor screen.Vector2, attrs screen.CellAttrs) error
+	SetTitle(title string) error
+	SetIcon(icon string) error
+	Bell(visual bool) error
 	Close() error
 	SendEvent(interface{})
 	NextEvent() interface{}

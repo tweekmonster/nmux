@@ -200,6 +200,17 @@ func (c *Client) parseOps(r *StreamReader) {
 
 			win.Clear(p.Bg)
 
+		case screen.OpTitle:
+			str := r.ReadString()
+			win.SetTitle(str)
+
+		case screen.OpIcon:
+			str := r.ReadString()
+			win.SetIcon(str)
+
+		case screen.OpBell:
+			win.Bell(r.ReadUint8() == 1)
+
 		case screen.OpFlush:
 			mode := r.ReadEint32()
 			cursorX := r.ReadEint32()

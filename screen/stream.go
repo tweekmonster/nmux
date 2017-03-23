@@ -131,6 +131,25 @@ func (s *Screen) writeSize() {
 	s.payload.WriteEncodedInts(s.Size.X, s.Size.Y)
 }
 
+func (s *Screen) writeTitle(title string) {
+	s.payload.WriteOp(OpTitle)
+	s.payload.WriteStringRun(title)
+}
+
+func (s *Screen) writeIcon(icon string) {
+	s.payload.WriteOp(OpIcon)
+	s.payload.WriteStringRun(icon)
+}
+
+func (s *Screen) writeBell(visual bool) {
+	s.payload.WriteOp(OpBell)
+	if visual {
+		s.payload.WriteByte(1)
+	} else {
+		s.payload.WriteByte(0)
+	}
+}
+
 // Flush the operations and send the final state and cursor position along with
 // cell attributes that's under the cursor.  This allow the client to render the
 // cursor without needing to track the cell data.

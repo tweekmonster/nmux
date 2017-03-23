@@ -2,6 +2,7 @@
 #define SCREEN_H
 #import <Cocoa/Cocoa.h>
 #import <Carbon/Carbon.h>
+#import <QuartzCore/CoreAnimation.h>
 #import "ops.h"
 
 @interface NmuxScreen : NSView <NSWindowDelegate>
@@ -34,6 +35,7 @@
 @property (atomic) NSSize grid;
 @property (atomic) Mode state;
 
+- (void)beep:(BOOL)visual;
 - (void)setGridSize:(NSSize)size;
 - (void)addDrawOp:(DrawOp *)op;
 - (void)flushDrawOps:(const char *)character charWidth:(int)width

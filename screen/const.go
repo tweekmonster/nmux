@@ -6,8 +6,10 @@ import (
 	"strings"
 )
 
+// Op is the screen operation type.
 type Op uint8
 
+// Screen operations.
 const (
 	OpResize Op = iota + 1
 	OpClear
@@ -17,14 +19,19 @@ const (
 	OpStyle
 	OpPut
 	OpPutRep
+	OpTitle
+	OpIcon
+	OpBell
 	OpScroll
 	OpFlush
 	OpLog
 	OpEnd
 )
 
+// Attr is a set of screen cell attributes.
 type Attr uint8
 
+// Cell attributes
 const (
 	AttrReverse Attr = 1 << iota
 	AttrItalic
@@ -34,8 +41,10 @@ const (
 	AttrEnd
 )
 
+// Mode is the Neovim mode and other state information.
 type Mode uint8
 
+// Modes
 const (
 	ModeBusy Mode = 1 << iota
 	ModeMouseOn
@@ -46,6 +55,7 @@ const (
 	ModeEnd
 )
 
+// JSConst will contain a javascript representation of the constants above.
 var JSConst []byte
 
 func init() {

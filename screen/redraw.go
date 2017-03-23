@@ -148,9 +148,11 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 
 	case "set_title":
 		s.Title = args.String()
+		s.writeTitle(s.Title)
 		log.Println("set_title")
 
 	case "set_icon":
+		s.writeIcon(args.String())
 		log.Println("set_icon")
 
 	case "mouse_on":
@@ -178,9 +180,11 @@ func (s *Screen) redrawOp(op string, args *opArgs) {
 
 	case "bell":
 		log.Println("Bell")
+		s.writeBell(false)
 
 	case "visual_bell":
 		log.Println("Visual bell")
+		s.writeBell(true)
 
 	case "mode_change":
 		mode := args.String()
@@ -221,6 +225,7 @@ func (s *Screen) redrawFinalize(curFlush int) {
 	}
 }
 
+// RedrawHandler deals with the msgpack input from Neovim
 func (s *Screen) RedrawHandler(updates ...[]interface{}) {
 	s.mu.Lock()
 	s.flushCount++

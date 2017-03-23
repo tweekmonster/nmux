@@ -200,6 +200,24 @@ void flush(uintptr_t view, int mode, int x, int y, const char *character,
   });
 }
 
+void setTitle(uintptr_t view, const char *title) {
+  DISPATCH_A(^{
+    NmuxScreen *screen = (NmuxScreen *)view;
+    [[screen window] setTitle:[@"nmux: "
+      stringByAppendingString:[NSString stringWithUTF8String:title]]];
+  });
+}
+
+void setIcon(uintptr_t view, const char *icon) {
+
+}
+
+void bell(uintptr_t view, bool visual) {
+  DISPATCH_A(^{
+   [(NmuxScreen *)view beep:visual];
+  });
+}
+
 void getCellSize(int *x, int *y) {
   NSSize cellSize = nmux_CellSize();
   *x = (int)cellSize.width;
@@ -260,12 +278,7 @@ void spam(NmuxScreen *view) {
     y++;
   }
 
-  TextAttr ta;
-  ta.attrs = 0;
-  ta.fg = 0;
-  ta.bg = 0;
-  ta.sp = 0;
-  [view flushDrawOps:"X" charWidth:1 pos:NSMakePoint(0, 0) attrs:ta];
+  flush((uintptr_t)view, 0, 1, 1, "X", 1, 0, 0xffffff, 0, 0xffffff);
 }
 
 int main(int argc, char *argv[]) {

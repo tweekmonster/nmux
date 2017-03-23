@@ -2,6 +2,7 @@ package gui
 
 /*
 #import <stdint.h>
+#import <stdbool.h>
 
 typedef unsigned short unichar;
 
@@ -14,6 +15,9 @@ void drawRepeatedText(uintptr_t, unichar, int, int, uint8_t, int32_t, int32_t, i
 void clearScreen(uintptr_t, int32_t);
 void scrollScreen(uintptr_t, int, int, int, int, int, int32_t);
 void flush(uintptr_t, int, int, int, const char *, int, uint8_t, int32_t, int32_t, int32_t);
+void setTitle(uintptr_t, const char *);
+void setIcon(uintptr_t, const char *);
+void bell(uintptr_t, bool);
 void getCellSize(int*, int*);
 */
 import "C"
@@ -102,6 +106,23 @@ func (w *window) Flush(mode int, character string, width int, cursor screen.Vect
 	}
 	cbytes := []byte(character)
 	C.flush(C.uintptr_t(w.id), C.int(mode), C.int(cursor.X), C.int(cursor.Y), (*C.char)(unsafe.Pointer(&cbytes[0])), C.int(width), C.uint8_t(attrs.Attrs), bg, fg, C.int32_t(attrs.Sp))
+	return nil
+}
+
+func (w *window) SetTitle(title string) error {
+	tbytes := append([]byte(title), 0)
+	C.setTitle(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&tbytes[0])))
+	return nil
+}
+
+func (w *window) SetIcon(icon string) error {
+	ibytes := append([]byte(icon), 0)
+	C.setIcon(C.uintptr_t(w.id), (*C.char)(unsafe.Pointer(&ibytes[0])))
+	return nil
+}
+
+func (w *window) Bell(visual bool) error {
+	C.bell(C.uintptr_t(w.id), C.bool(visual))
 	return nil
 }
 
