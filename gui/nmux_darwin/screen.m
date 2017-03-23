@@ -102,6 +102,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 
     CGPathCloseSubpath(path);
     [shake setPath:path];
+    CGPathRelease(path);
     [shake setDuration:0.15f];
 
     [[self window] setAnimations:[NSDictionary dictionaryWithObject:shake forKey:@"frameOrigin"]];
@@ -674,7 +675,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   [self setNeedsDisplayInRect:cursorRect];
 }
 
-- (void)flushDrawOps:(const char *)character charWidth:(int)width
+- (void)flushDrawOps:(NSString *)character charWidth:(int)width
                  pos:(NSPoint)cursorPos attrs:(TextAttr)attrs {
   [drawLock lock];
 
@@ -726,9 +727,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
                                             userInfo:nil
                                              repeats:YES];
 
-    NSString *cursorChar = [NSString stringWithUTF8String:character];
-    DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String]
-                                          x:0 y:0 attrs:attrs];
+    DrawTextOp *op = [DrawTextOp opWithText:character x:0 y:0 attrs:attrs];
     CGSize cellSize = nmux_CellSize();
     CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
                               (cursorPos.y ) * cellSize.height);

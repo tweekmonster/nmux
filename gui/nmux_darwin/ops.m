@@ -17,15 +17,14 @@
 
 #pragma mark - DrawTextOp
 @implementation DrawTextOp
-+ (DrawTextOp *)opWithText:(const char *)text x:(int)x y:(int)y
++ (DrawTextOp *)opWithText:(NSString *)text x:(int)x y:(int)y
                      attrs:(TextAttr)attrs {
   DrawTextOp *op = [[DrawTextOp alloc] init];
-  NSString *str = [NSString stringWithUTF8String:text];
-  // Note: The width is not based on character sizes since nvim takes care of
+  // Note: The width is not based on character sizes since nmux takes care of
   // character width spacing.
-  [op setText:str];
+  [op setText:text];
   [op setAttrs:attrs];
-  [op setDirtyX:x y:y w:(int)[str length] h:1];
+  [op setDirtyX:x y:y w:(int)[text length] h:1];
   return [op autorelease];
 }
 

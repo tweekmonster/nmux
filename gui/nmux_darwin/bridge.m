@@ -128,7 +128,9 @@ void setGridSize(uintptr_t view, int cols, int rows) {
 
 void drawText(uintptr_t view, const char *text, int length, int index,
               uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
-  DISPATCH_A(^{
+  NSString *str = [NSString stringWithUTF8String:text];
+
+  DISPATCH_A((^{
     NmuxScreen *screen = (NmuxScreen *)view;
     int x = index % (int)[screen grid].width;
     int y = index / (int)[screen grid].width;
@@ -139,13 +141,8 @@ void drawText(uintptr_t view, const char *text, int length, int index,
     t.bg = bg;
     t.sp = sp;
 
-    char *str = calloc(length + 1, sizeof(char));
-    strncpy(str, text, length);
-    str[length] = '\0';
-
     [screen addDrawOp:[DrawTextOp opWithText:str x:x y:y attrs:t]];
-    free(str);
-  });
+  }));
 }
 
 void drawRepeatedText(uintptr_t view, unichar character, int length, int index,
@@ -182,6 +179,8 @@ void clearScreen(uintptr_t view, int32_t bg) {
 
 void flush(uintptr_t view, int mode, int x, int y, const char *character,
            int width, uint8_t attrs, int32_t fg, int32_t bg, int32_t sp) {
+  NSString *str = [NSString stringWithUTF8String:character];
+
   DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     [screen setState:(Mode)mode];
@@ -196,15 +195,16 @@ void flush(uintptr_t view, int mode, int x, int y, const char *character,
     NSPoint pos;
     pos.x = x;
     pos.y = y;
-    [screen flushDrawOps:character charWidth:width pos:pos attrs:ta];
+    [screen flushDrawOps:str charWidth:width pos:pos attrs:ta];
   });
 }
 
 void setTitle(uintptr_t view, const char *title) {
+  NSString *str = [NSString stringWithUTF8String:title];
   DISPATCH_A(^{
     NmuxScreen *screen = (NmuxScreen *)view;
     [[screen window] setTitle:[@"nmux: "
-      stringByAppendingString:[NSString stringWithUTF8String:title]]];
+      stringByAppendingString:str]];
   });
 }
 

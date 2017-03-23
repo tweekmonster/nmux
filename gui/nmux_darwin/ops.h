@@ -22,7 +22,7 @@
 }
 @property (atomic, retain) NSString *text;
 
-+ (DrawTextOp *)opWithText:(const char *)text x:(int)x y:(int)y
++ (DrawTextOp *)opWithText:(NSString *)text x:(int)x y:(int)y
                      attrs:(TextAttr)attrs;
 @end
 

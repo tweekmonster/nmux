@@ -57,7 +57,7 @@ func (w *window) PutString(s string, index int, attrs screen.CellAttrs) error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
-	sbytes := []byte(s)
+	sbytes := []byte(s + "\x00")
 	fg := C.int32_t(attrs.Fg)
 	bg := C.int32_t(attrs.Bg)
 	if attrs.Attrs&screen.AttrReverse != 0 {
@@ -104,7 +104,7 @@ func (w *window) Flush(mode int, character string, width int, cursor screen.Vect
 	if attrs.Attrs&screen.AttrReverse != 0 {
 		fg, bg = bg, fg
 	}
-	cbytes := []byte(character)
+	cbytes := []byte(character + "\x00")
 	C.flush(C.uintptr_t(w.id), C.int(mode), C.int(cursor.X), C.int(cursor.Y), (*C.char)(unsafe.Pointer(&cbytes[0])), C.int(width), C.uint8_t(attrs.Attrs), bg, fg, C.int32_t(attrs.Sp))
 	return nil
 }
