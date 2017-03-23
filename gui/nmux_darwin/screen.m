@@ -49,6 +49,11 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)dealloc {
+  if (cursorThrobber != nil) {
+    [cursorThrobber invalidate];
+    cursorThrobber = nil;
+  }
+
   if (viewBg != NULL) {
     CFRelease(viewBg);
   }
@@ -607,7 +612,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
     }
   }
 
-  if (cursorLayer != NULL && ([self state] & ModeBusy) != ModeBusy) {
+  if (cursorLayer != NULL && !cursorThrob && ([self state] & ModeBusy) != ModeBusy) {
     CGContextSaveGState(ctx);
     CGContextClipToRect(ctx, newCursorRect);
     CGContextDrawLayerAtPoint(ctx, newCursorRect.origin, cursorLayer);
@@ -639,6 +644,11 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   BOOL display = didFlush;
   [drawLock unlock];
   return display;
+}
+
+- (void)throbCursor {
+  cursorThrob = !cursorThrob;
+  [self setNeedsDisplayInRect:cursorRect];
 }
 
 - (void)flushDrawOps:(const char *)character charWidth:(int)width
@@ -682,6 +692,17 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
 
   if (cursorUpdate) {
+    if (cursorThrobber != nil) {
+      [cursorThrobber invalidate];
+    }
+    cursorThrob = NO;
+    cursorThrobber = [NSTimer
+                      scheduledTimerWithTimeInterval:0.5f
+                                              target:self
+                                            selector:@selector(throbCursor)
+                                            userInfo:nil
+                                             repeats:YES];
+
     NSString *cursorChar = [NSString stringWithUTF8String:character];
     DrawTextOp *op = [DrawTextOp opWithText:[cursorChar UTF8String]
                                           x:0 y:0 attrs:attrs];

@@ -12,6 +12,8 @@
   CGLayerRef screenLayer;
   CGLayerRef cursorLayer;
   NSRect cursorRect;
+  BOOL cursorThrob;
+  NSTimer *cursorThrobber;
   BOOL cursorUpdate;
   BOOL didFlush;
 
