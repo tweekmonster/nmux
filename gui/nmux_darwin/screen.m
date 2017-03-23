@@ -89,27 +89,27 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)beep:(BOOL)visual {
-  if (visual) {
-    NSRect frame = [[self window] frame];
-    CAKeyframeAnimation *shake = [CAKeyframeAnimation animation];
-    CGMutablePathRef path = CGPathCreateMutable();
-    CGPathMoveToPoint(path, NULL, NSMinX(frame), NSMinY(frame));
-
-    for (int i = 0; i < 3; i++) {
-      CGPathAddLineToPoint(path, NULL, NSMinX(frame) - 5, NSMinY(frame));
-      CGPathAddLineToPoint(path, NULL, NSMinX(frame) + 5, NSMinY(frame));
-    }
-
-    CGPathCloseSubpath(path);
-    [shake setPath:path];
-    CGPathRelease(path);
-    [shake setDuration:0.15f];
-
-    [[self window] setAnimations:[NSDictionary dictionaryWithObject:shake forKey:@"frameOrigin"]];
-    [[[self window] animator] setFrameOrigin:frame.origin];
-  } else {
+  if (!visual) {
     NSBeep();
   }
+
+  NSRect frame = [[self window] frame];
+  CAKeyframeAnimation *shake = [CAKeyframeAnimation animation];
+  CGMutablePathRef path = CGPathCreateMutable();
+  CGPathMoveToPoint(path, NULL, NSMinX(frame), NSMinY(frame));
+
+  for (int i = 0; i < 3; i++) {
+    CGPathAddLineToPoint(path, NULL, NSMinX(frame) - 5, NSMinY(frame));
+    CGPathAddLineToPoint(path, NULL, NSMinX(frame) + 5, NSMinY(frame));
+  }
+
+  CGPathCloseSubpath(path);
+  [shake setPath:path];
+  CGPathRelease(path);
+  [shake setDuration:0.15f];
+
+  [[self window] setAnimations:[NSDictionary dictionaryWithObject:shake forKey:@"frameOrigin"]];
+  [[[self window] animator] setFrameOrigin:frame.origin];
 }
 
 #pragma mark - NSResponder
