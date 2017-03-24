@@ -28,6 +28,15 @@ typedef enum _Mode {
   ModeEnd     = 1 << 6,
 } Mode;
 
+typedef enum _Attr {
+  AttrReverse   = 1 << 0,
+  AttrItalic    = 1 << 1,
+  AttrBold      = 1 << 2,
+  AttrUnderline = 1 << 3,
+  AttrUndercurl = 1 << 4,
+  AttrEnd       = 1 << 5,
+} Attr;
+
 
 static inline NSSize NSSizeMultiply(NSSize s1, NSSize s2) {
   s1.width *= s2.width;

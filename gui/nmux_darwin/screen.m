@@ -522,21 +522,26 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {
+  CGFloat descent = nmux_FontDescent(nil);
+  CGSize cellSize = nmux_CellSize();
+  CTFontRef font = nmux_CurrentFont();
   CGColorRef fg = CGRGB([op attrs].fg);
   CGColorRef bg = CGRGB([op attrs].bg);
+  CGRect bgRect = rect;
 
   CGContextSaveGState(ctx);
-  CGContextSetFillColorWithColor(ctx, bg);
-  CGContextFillRect(ctx, rect);
+  CGContextSetFillColorWithColor(ctx, [op cursor] ? fg : bg);
+  CGContextFillRect(ctx, bgRect);
 
-  if ([op cursor]) {
-    CGContextSetFillColorWithColor(ctx, fg);
-    if ((_state & ModeInsert) == ModeInsert) {
-      rect.size.width = 1;
-    } else if ((_state & ModeReplace) == ModeReplace) {
-      rect.size.height = 2;
-    }
-    CGContextFillRect(ctx, rect);
+  if (([op attrs].attrs & AttrUnderline) == AttrUnderline) {
+    CGColorRef uc = CGColorCreateCopyWithAlpha(
+        ([op cursor] && (_state & ModeNormal) == ModeNormal) ? bg : fg, 0.5f);
+    CGContextSetFillColorWithColor(ctx, uc);
+    bgRect = rect;
+    bgRect.origin.y += (int)(descent - 2.5f);
+    bgRect.size.height = 1;
+    CGContextFillRect(ctx, bgRect);
+    CGColorRelease(uc);
   }
 
   size_t runLength = (size_t)[[op text] length];
@@ -555,23 +560,43 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
 
   [[op text] getCharacters:runChars range:NSMakeRange(0, runLength)];
-  NSSize cellSize = nmux_CellSize();
-  CGFloat descent = nmux_FontDescent(nil);
-  CTFontRef font = nmux_CurrentFont();
   CGPoint o = rect.origin;
-  o.x += nmux_InitialCharPos(font);
+  o.x += nmux_InitialCharPos(nil);
   o.y += descent;
 
   for (size_t i = 0; i < runLength; i++) {
     runPositions[i] = CGPointMake(i * cellSize.width, 0);
   }
 
-  CGContextSetFillColorWithColor(ctx, ([op cursor] && (_state & ModeNormal) == ModeNormal) ? bg : fg);
+  CGContextSetFillColorWithColor(ctx, (([op cursor]
+                                        && (_state & ModeNormal) == ModeNormal)
+                                       ? bg : fg));
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
   CGContextTranslateCTM(ctx, o.x, o.y);
   drawTextInContext(ctx, font, runChars, runGlyphs, runPositions, runLength);
   CGContextTranslateCTM(ctx, -o.x, -o.y);
+
+  if (([op attrs].attrs & AttrUndercurl) == AttrUndercurl) {
+    CGRect ucRect = [op cursor] ? cursorRect : rect;
+    CGColorRef uc = CGColorCreateCopyWithAlpha(CGRGB([op attrs].sp), 0.7f);
+    CGContextSetStrokeColorWithColor(ctx, uc);
+    CGContextSetLineWidth(ctx, 1);
+    CGContextSetLineJoin(ctx, kCGLineJoinRound);
+    CGFloat y = NSMinY(rect) + (int)(descent - 2);
+    CGFloat a = 0.5f;
+    for (CGFloat x = 0, l = NSWidth(rect); x <= l; x+=0.5) {
+      CGFloat sy = y + a * sinf(NSMinX(ucRect) + x) + 1;
+      if (x == 0) {
+        CGContextMoveToPoint(ctx, NSMinX(rect) + x, sy);
+      } else {
+        CGContextAddLineToPoint(ctx, NSMinX(rect) + x, sy);
+      }
+    }
+    CGContextStrokePath(ctx);
+    CGColorRelease(uc);
+  }
+
   CGContextRestoreGState(ctx);
 }
 
@@ -734,6 +759,46 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
   }
 
   if (cursorUpdate) {
+    // Only draw the character on the cursor if the cursor collides with the
+    // glyph.
+    BOOL drawChar = (_state & ModeNormal) == ModeNormal;
+    CGSize cellSize = nmux_CellSize();
+    cursorRect.origin = CGPointMake(cursorPos.x * cellSize.width,
+                                    (cursorPos.y ) * cellSize.height);
+    cursorRect.size = cellSize;
+    cursorRect.size.width *= width;
+    CGRect drawRect = CGRectZero;
+    drawRect.size = cursorRect.size;
+    drawRect = CGRectApplyAffineTransform(drawRect, cursorTransform);
+
+    cursorRect = CGRectApplyAffineTransform(cursorRect, transform);
+
+    if (!drawChar) {
+      if ((_state & ModeReplace) == ModeReplace) {
+        cursorRect.size.height = 2;
+      } else {
+        cursorRect.size.width = 1;
+      }
+    }
+
+    [self resizeCursor:cursorRect.size];
+    ctx = CGLayerGetContext(cursorLayer);
+    CGContextSaveGState(ctx);
+
+    if (drawChar) {
+      DrawTextOp *op = [DrawTextOp opWithText:character x:0 y:0 attrs:attrs];
+      [op setCursor:true];
+      CGContextSetShouldSubpixelPositionFonts(ctx, YES);
+      CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
+      [self drawTextContext:ctx op:op rect:drawRect];
+    } else {
+      CGContextSetFillColorWithColor(ctx, CGRGB(attrs.fg));
+      CGContextFillRect(ctx, drawRect);
+    }
+
+    CGContextRestoreGState(ctx);
+    [self setNeedsDisplayInRect:cursorRect];
+
     if (cursorThrobber != nil) {
       [cursorThrobber invalidate];
     }
@@ -744,33 +809,6 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
                                             selector:@selector(throbCursor)
                                             userInfo:nil
                                              repeats:YES];
-
-    DrawTextOp *op = [DrawTextOp opWithText:character x:0 y:0 attrs:attrs];
-    [op setCursor:true];
-    CGSize cellSize = nmux_CellSize();
-    CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
-                              (cursorPos.y ) * cellSize.height);
-    CGRect dirtyRect = [op dirtyRect];
-    if (width > 1) {
-      cellSize.width *= width;
-      dirtyRect.size.width *= width;
-    }
-
-    [self resizeCursor:cellSize];
-
-    ctx = CGLayerGetContext(cursorLayer);
-    CGContextSaveGState(ctx);
-    CGContextSetShouldSubpixelPositionFonts(ctx, YES);
-    CGContextSetShouldSubpixelQuantizeFonts(ctx, YES);
-
-    CGRect rect = CGRectApplyAffineTransform(dirtyRect, cursorTransform);
-    [self drawTextContext:ctx op:op rect:rect];
-    cursorRect.origin = pos;
-    cursorRect.size = cellSize;
-    cursorRect = CGRectApplyAffineTransform(cursorRect, transform);
-    [self setNeedsDisplayInRect:cursorRect];
-
-    CGContextRestoreGState(ctx);
   }
 
   didFlush = YES;
