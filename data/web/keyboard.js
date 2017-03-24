@@ -118,6 +118,7 @@ function nmuxKey(e) {
       key = 'Space';
       break;
     case '<':
+      key = '<lt>';
     case ',':
     case '>':
     case '.':

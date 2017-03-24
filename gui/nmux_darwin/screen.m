@@ -284,6 +284,8 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
       if (c >= ' ' && c <= '~') {
         switch (c) {
           case '<':
+            key = @"lt";
+
           case ',':
           case '>':
           case '.':
