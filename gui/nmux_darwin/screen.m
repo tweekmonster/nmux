@@ -44,7 +44,10 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)setState:(Mode)state {
-  cursorUpdate = (state & ModeRedraw) != ModeRedraw;
+  cursorUpdate = ((state & ModeRedraw) != ModeRedraw
+                  || (state & ModeNormal) != (_state & ModeNormal)
+                  || (state & ModeInsert) != (_state & ModeInsert)
+                  || (state & ModeReplace) != (_state & ModeReplace));
   _state = state;
 }
 
@@ -519,9 +522,22 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
 }
 
 - (void)drawTextContext:(CGContextRef)ctx op:(DrawTextOp *)op rect:(CGRect)rect {
+  CGColorRef fg = CGRGB([op attrs].fg);
+  CGColorRef bg = CGRGB([op attrs].bg);
+
   CGContextSaveGState(ctx);
-  CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].bg));
+  CGContextSetFillColorWithColor(ctx, bg);
   CGContextFillRect(ctx, rect);
+
+  if ([op cursor]) {
+    CGContextSetFillColorWithColor(ctx, fg);
+    if ((_state & ModeInsert) == ModeInsert) {
+      rect.size.width = 1;
+    } else if ((_state & ModeReplace) == ModeReplace) {
+      rect.size.height = 2;
+    }
+    CGContextFillRect(ctx, rect);
+  }
 
   size_t runLength = (size_t)[[op text] length];
 
@@ -550,7 +566,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
     runPositions[i] = CGPointMake(i * cellSize.width, 0);
   }
 
-  CGContextSetFillColorWithColor(ctx, CGRGB([op attrs].fg));
+  CGContextSetFillColorWithColor(ctx, ([op cursor] && (_state & ModeNormal) == ModeNormal) ? bg : fg);
   CGContextSetTextDrawingMode(ctx, kCGTextFill);
 
   CGContextTranslateCTM(ctx, o.x, o.y);
@@ -730,6 +746,7 @@ static inline NSMutableString * mouse_name(NSEvent *event) {
                                              repeats:YES];
 
     DrawTextOp *op = [DrawTextOp opWithText:character x:0 y:0 attrs:attrs];
+    [op setCursor:true];
     CGSize cellSize = nmux_CellSize();
     CGPoint pos = CGPointMake(cursorPos.x * cellSize.width,
                               (cursorPos.y ) * cellSize.height);

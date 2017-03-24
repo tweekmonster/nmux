@@ -105,7 +105,7 @@ func (w *window) Flush(mode int, character string, width int, cursor screen.Vect
 		fg, bg = bg, fg
 	}
 	cbytes := []byte(character + "\x00")
-	C.flush(C.uintptr_t(w.id), C.int(mode), C.int(cursor.X), C.int(cursor.Y), (*C.char)(unsafe.Pointer(&cbytes[0])), C.int(width), C.uint8_t(attrs.Attrs), bg, fg, C.int32_t(attrs.Sp))
+	C.flush(C.uintptr_t(w.id), C.int(mode), C.int(cursor.X), C.int(cursor.Y), (*C.char)(unsafe.Pointer(&cbytes[0])), C.int(width), C.uint8_t(attrs.Attrs), fg, bg, C.int32_t(attrs.Sp))
 	return nil
 }
 

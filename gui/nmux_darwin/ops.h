@@ -19,8 +19,10 @@
 @interface DrawTextOp : DrawOp
 {
   NSString *_text;
+  BOOL _cursor;
 }
 @property (atomic, retain) NSString *text;
+@property (atomic) BOOL cursor;
 
 + (DrawTextOp *)opWithText:(NSString *)text x:(int)x y:(int)y
                      attrs:(TextAttr)attrs;
